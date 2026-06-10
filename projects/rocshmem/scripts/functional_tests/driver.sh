@@ -151,6 +151,7 @@ declare -A TEST_NUMBERS=(
   ["tile_allgather"]="134"
   ["tile_allgather_wave"]="135"
   ["tile_allgather_wg"]="136"
+  ["teamreducescatter"]="137"
 )
 
 # Detect which runtime to use
@@ -708,6 +709,10 @@ TestColl() {
   ExecTest  "fcollect"         2       1            64        32768
 
   ExecTest  "teamreduction"    2       1            64        32768
+
+  ExecTest  "teamreducescatter" 2     1            64        32768
+  ExecTest  "teamreducescatter" 4     1            64        32768
+  ExecTest  "teamreducescatter" 8     1            64        32768
 }
 
 TestOnStream() {
