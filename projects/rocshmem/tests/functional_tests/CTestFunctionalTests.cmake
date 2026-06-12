@@ -152,6 +152,7 @@ set(TEST_tile_broadcast_wg 133)
 set(TEST_tile_allgather 134)
 set(TEST_tile_allgather_wave 135)
 set(TEST_tile_allgather_wg 136)
+set(TEST_teamreducescatter 137)
 
 # MPI should already be found by the parent CMakeLists.txt
 # Use standard CMake MPI variables set by find_package(MPI)
@@ -1023,6 +1024,7 @@ function(add_coll_tests)
         add_rocshmem_functional_test(NAME teambroadcast RANKS 2 WORKGROUPS 1 THREADS 64 MAX_MSG_SIZE 32768)
         add_rocshmem_functional_test(NAME fcollect RANKS 2 WORKGROUPS 1 THREADS 64 MAX_MSG_SIZE 32768)
         add_rocshmem_functional_test(NAME teamreduction RANKS 2 WORKGROUPS 1 THREADS 64 MAX_MSG_SIZE 32768)
+        add_rocshmem_functional_test(NAME teamreducescatter RANKS 2 WORKGROUPS 1 THREADS 64 MAX_MSG_SIZE 32768)
     end_test_group()
 
     # Team split 2D test - requires exactly 4 PEs
