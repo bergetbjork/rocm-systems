@@ -11,8 +11,8 @@
    * `rocshmem_reduce_on_stream`
    * `rocshmem_team_split_2D`
    * Tile-granular RMA operations for the IPC backend
-   * Host-initiated RMA operations in the IPC backend for the non-MPI
-     bootstrapping path
+   * Added support for host-initiated RMA operations in the IPC backend for the non-MPI bootstrapping
+     path: put, get, fence, quiet, arithmetic AMOs, and P2P sync ops
    * Team creation using non-contiguous parent teams in the IPC backend
    * Python bindings of memory-management APIs
    * Python bindings coverage for team APIs
