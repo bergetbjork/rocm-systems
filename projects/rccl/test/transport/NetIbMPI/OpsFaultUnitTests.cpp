@@ -403,4 +403,38 @@ TEST(OpsFaultUnit, ShimPollCqSynthesizeIdle) {
     }
 }
 
+// =============================================================================
+// Test: ShimLostRealOpDefensive
+//
+// Defensive guard: if a shim is ever invoked after its registry entry is gone
+// (the saved real op is lost), it must fail loudly rather than dereference a
+// null pointer. This path cannot occur through the public API on healthy
+// hardware; the test documents and locks the guard behavior.
+//
+// Verifies: a captured shim called after Remove returns EFAULT (post_send/recv)
+//           or a negative value (poll_cq) instead of crashing.
+// Requires: installed fake context; shim pointers captured before Remove.
+// =============================================================================
+TEST(OpsFaultUnit, ShimLostRealOpDefensive) {
+    resetCounters();
+    FakeCtx f(/*qpNum=*/205);
+    ASSERT_EQ(ncclIbOpsFaultInstall(&f.ctx), ncclSuccess);
+
+    // Capture the installed shim pointers, then remove the registry entry.
+    auto shimSend = f.ctx.ops.post_send;
+    auto shimRecv = f.ctx.ops.post_recv;
+    auto shimPoll = f.ctx.ops.poll_cq;
+    ASSERT_EQ(ncclIbOpsFaultRemove(&f.ctx), ncclSuccess);
+
+    struct ibv_send_wr swr; memset(&swr, 0, sizeof(swr));
+    struct ibv_recv_wr rwr; memset(&rwr, 0, sizeof(rwr));
+    struct ibv_wc wc[1];
+    struct ibv_send_wr* sbad = nullptr;
+    struct ibv_recv_wr* rbad = nullptr;
+
+    EXPECT_EQ(shimSend(&f.qp, &swr, &sbad), EFAULT);
+    EXPECT_EQ(shimRecv(&f.qp, &rwr, &rbad), EFAULT);
+    EXPECT_LT(shimPoll(&f.cq, 1, wc), 0);
+}
+
 #endif /* MPI_TESTS_ENABLED && ENABLE_FAULT_INJECTION */
