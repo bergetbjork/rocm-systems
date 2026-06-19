@@ -40,6 +40,7 @@ Full documentation for amd_smi_lib is available at [https://rocm.docs.amd.com/pr
     - `--cpu-lclk-dpm-level` (0-3)
     - `--cpu-disable-apb` (0-3)
   - `--cpu-pwr-limit` values above the socket maximum are now reduced to the maximum and applied, with a warning.
+
 - **Added compute partition memory allocation mode API**.  
   - New `amd-smi static --partition` output includes `COMPUTE_PARTITION_MEM_ALLOC_MODE` field.
   - New `amd-smi set --compute-partition-mem-alloc-mode [CAPPING|ALL]` to control memory allocation mode (requires sudo).
@@ -49,6 +50,9 @@ Full documentation for amd_smi_lib is available at [https://rocm.docs.amd.com/pr
 
 - **Added `AMDSMI_LINK_TYPE_NUMA` and `AMDSMI_LINK_TYPE_XNUMA` to `amdsmi_link_type_t` enum**.  
   - Added the new types to `amdsmi_link_types` as part of support for NICs
+
+- **Added `amdsmi_get_vcn_busy_percent` API**.  
+  - Navi devices were incorrectly displaying N/A for vcn_busy in their metrics output due to a difference in design. This API was added to allow users to properly obtain the vcn_busy metric from Navi and other similar devices.
 
 ### Changed
 
@@ -110,6 +114,8 @@ levels as strings instead of dictionary objects**.
 
 - **Fixed fabric telemetry APIs returning the wrong status on non-IFoE systems**.  
   - `amdsmi_alloc_fabric_telemetry()`, `amdsmi_get_fabric_telemetry_data()`, and `amdsmi_free_fabric_telemetry()` now return `AMDSMI_STATUS_NOT_SUPPORTED` on systems without fabric hardware, consistent with `amdsmi_get_gpu_fabric_info()`.
+
+- **Fixed incorrect N/A output for vcn_busy field in `amd-smi metric --usage`**.  
 
 ## amd_smi_lib for ROCm 7.13.0
 
