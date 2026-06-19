@@ -151,6 +151,8 @@ declare -A TEST_NUMBERS=(
   ["tile_allgather"]="134"
   ["tile_allgather_wave"]="135"
   ["tile_allgather_wg"]="136"
+  ["broadcast_wave"]="137"
+>>>>>>> dfbdd1c030 (add functional test, fix copilot suggestions)
 )
 
 # Detect which runtime to use
@@ -708,6 +710,8 @@ TestColl() {
   ExecTest  "fcollect"         2       1            64        32768
 
   ExecTest  "teamreduction"    2       1            64        32768
+
+  ExecTest  "broadcast_wave"   2       1            64        32768
 }
 
 TestOnStream() {
