@@ -275,4 +275,61 @@ TEST(OpsFaultUnit, ShimPostRecvErrnoAndForward) {
     EXPECT_EQ(ncclIbOpsFaultRemove(&f.ctx), ncclSuccess);
 }
 
+// =============================================================================
+// Test: ShimPollCqRewriteAndForward
+//
+// Drives the poll_cq shim's rewrite path (status overwrite under a finite
+// budget, then forwarding), plus the real-returns-<0 passthrough and the
+// ANY-key lookup fallback (findFault second branch).
+//
+// Verifies: a matching completion's status is rewritten until the budget is
+//           spent, negative real returns pass through, and the ANY key matches a
+//           qp_num with no exact entry.
+// Requires: installed fake context.
+// =============================================================================
+TEST(OpsFaultUnit, ShimPollCqRewriteAndForward) {
+    resetCounters();
+    FakeCtx f(/*qpNum=*/202);
+    ASSERT_EQ(ncclIbOpsFaultInstall(&f.ctx), ncclSuccess);
+
+    struct ibv_wc wc[4];
+
+    // No fault armed: real WCs pass through unmodified.
+    g_pollReturn = 2; g_pollWcQpNum = 202;
+    EXPECT_EQ(f.ctx.ops.poll_cq(&f.cq, 4, wc), 2);
+    EXPECT_EQ(wc[0].status, IBV_WC_SUCCESS);
+
+    // Rewrite mode, finite budget of 1, matching qp_num.
+    ASSERT_EQ(ncclIbOpsFaultArmPollCq(&f.ctx, 202, kWcRemAccess, /*count=*/1, /*idle=*/false),
+              ncclSuccess);
+    g_pollReturn = 2;
+    EXPECT_EQ(f.ctx.ops.poll_cq(&f.cq, 4, wc), 2);
+    // First WC rewritten; budget now spent.
+    EXPECT_EQ((int)wc[0].status, kWcRemAccess);
+
+    // Budget exhausted: next poll leaves status untouched.
+    g_pollReturn = 1;
+    EXPECT_EQ(f.ctx.ops.poll_cq(&f.cq, 4, wc), 1);
+    EXPECT_EQ(wc[0].status, IBV_WC_SUCCESS);
+
+    // Real poll returns negative: shim passes the error through.
+    g_pollReturn = -1;
+    EXPECT_LT(f.ctx.ops.poll_cq(&f.cq, 4, wc), 0);
+
+    EXPECT_EQ(ncclIbOpsFaultRemove(&f.ctx), ncclSuccess);
+
+    // ANY-key rewrite: arm the context-wide key, then deliver a real completion
+    // whose qp_num has no exact entry. The lookup must fall back to the ANY entry
+    // (findFault second branch) and rewrite the WC.
+    resetCounters();
+    FakeCtx g(/*qpNum=*/777);
+    ASSERT_EQ(ncclIbOpsFaultInstall(&g.ctx), ncclSuccess);
+    ASSERT_EQ(ncclIbOpsFaultArmPollCq(&g.ctx, NCCL_IB_OPS_FAULT_QP_ANY, kWcRemAccess,
+                                      /*count=*/-1, /*idle=*/false), ncclSuccess);
+    g_pollReturn = 1; g_pollWcQpNum = 999;  // qp_num not individually armed
+    EXPECT_EQ(g.ctx.ops.poll_cq(&g.cq, 4, wc), 1);
+    EXPECT_EQ((int)wc[0].status, kWcRemAccess);  // matched via ANY fallback
+    EXPECT_EQ(ncclIbOpsFaultRemove(&g.ctx), ncclSuccess);
+}
+
 #endif /* MPI_TESTS_ENABLED && ENABLE_FAULT_INJECTION */
