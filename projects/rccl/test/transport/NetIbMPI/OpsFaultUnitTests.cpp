@@ -210,4 +210,38 @@ TEST(OpsFaultUnit, ArmOnUnregisteredCtxRejected) {
     EXPECT_EQ(ncclIbOpsFaultClear(&f.ctx), ncclSuccess);
 }
 
+// =============================================================================
+// Test: ShimPostSendErrnoAndForward
+//
+// Drives ctx->ops.post_send (the shim) directly after install.
+//
+// Verifies: when armed the shim returns the injected errno and sets *bad_wr
+//           (tolerating bad_wr == NULL); when disarmed it forwards to the real op.
+// Requires: installed fake context.
+// =============================================================================
+TEST(OpsFaultUnit, ShimPostSendErrnoAndForward) {
+    resetCounters();
+    FakeCtx f(/*qpNum=*/200);
+    ASSERT_EQ(ncclIbOpsFaultInstall(&f.ctx), ncclSuccess);
+    ASSERT_EQ(ncclIbOpsFaultArmPostSend(&f.ctx, 200, kEagain), ncclSuccess);
+
+    struct ibv_send_wr wr; memset(&wr, 0, sizeof(wr));
+    struct ibv_send_wr* bad = nullptr;
+
+    // Armed: returns errno, sets *bad_wr.
+    EXPECT_EQ(f.ctx.ops.post_send(&f.qp, &wr, &bad), kEagain);
+    EXPECT_EQ(bad, &wr);
+    EXPECT_EQ(g_realPostSendCalls, 0);  // real op not reached
+
+    // Armed with bad_wr == NULL must not crash.
+    EXPECT_EQ(f.ctx.ops.post_send(&f.qp, &wr, nullptr), kEagain);
+
+    // Disarm (errnoVal=0): forwards to the real op.
+    ASSERT_EQ(ncclIbOpsFaultArmPostSend(&f.ctx, 200, 0), ncclSuccess);
+    EXPECT_EQ(f.ctx.ops.post_send(&f.qp, &wr, &bad), 0);
+    EXPECT_EQ(g_realPostSendCalls, 1);
+
+    EXPECT_EQ(ncclIbOpsFaultRemove(&f.ctx), ncclSuccess);
+}
+
 #endif /* MPI_TESTS_ENABLED && ENABLE_FAULT_INJECTION */
