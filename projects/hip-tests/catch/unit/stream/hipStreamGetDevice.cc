@@ -125,17 +125,12 @@ static bool validateStreamGetDevice() {
   int gpu = 0;
   hipDevice_t device_from_stream;
   hipStream_t stream;
-  // Runs on worker threads: avoid thread-unsafe Catch2 macros. Fold the status
-  // into the return value and let the main thread validate it via REQUIRE.
-  if (hipStreamCreate(&stream) != hipSuccess) {
-    return false;
-  }
-  bool res = (hipStreamGetDevice(stream, &device_from_stream) == hipSuccess);
-  res = res && (device_from_stream == gpu);
-  // Always destroy the stream once created, regardless of earlier failures, to
-  // avoid leaking it.
-  res = (hipStreamDestroy(stream) == hipSuccess) && res;
-  return res;
+  HIP_CHECK_THREAD(hipStreamCreate(&stream));
+  HIP_CHECK_THREAD(hipStreamGetDevice(stream, &device_from_stream));
+  HIP_CHECK_THREAD(hipStreamDestroy(stream));
+
+  REQUIRE_THREAD(device_from_stream == gpu);
+  return true;
 }
 
 static void thread_Test(int threadNum) { thread_results[threadNum] = validateStreamGetDevice(); }
