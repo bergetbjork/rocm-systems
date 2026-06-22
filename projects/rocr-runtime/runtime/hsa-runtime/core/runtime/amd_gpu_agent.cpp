@@ -106,9 +106,9 @@ GpuAgent::GpuAgent(HSAuint32 node, const HsaNodeProperties& node_props, bool xna
       scratch_used_large_(0),
       queues_(),
       queue_pool_(this),
-      trap_code_buf_(NULL),
+      trap_code_buf_(nullptr),
       trap_code_buf_size_(0),
-      doorbell_queue_map_(NULL),
+      doorbell_queue_map_(nullptr),
       memory_bus_width_(0),
       memory_max_frequency_(0),
       enum_index_(index),
@@ -119,7 +119,7 @@ GpuAgent::GpuAgent(HSAuint32 node, const HsaNodeProperties& node_props, bool xna
       scratch_limit_async_threshold_(0),
       scratch_cache_(
           [this](void* base, size_t size, bool large) { ReleaseScratch(base, size, large); }),
-      trap_handler_tma_region_(NULL),
+      trap_handler_tma_region_(nullptr),
       rec_sdma_eng_override_(false),
       pcs_hosttrap_data_(),
       pcs_stochastic_data_(),
@@ -384,7 +384,7 @@ void GpuAgent::AssembleShader(const char* func_name, AssembleTarget assemble_tar
   assert(compiled_shader_it != compiled_shaders.end() &&
          "Precompiled shader unavailable");
 
-  ASICShader* asic_shader = NULL;
+  ASICShader* asic_shader = nullptr;
 
   switch (supported_isas()[0]->GetMajorVersion()) {
     case 7:
@@ -431,7 +431,7 @@ void GpuAgent::AssembleShader(const char* func_name, AssembleTarget assemble_tar
 
   code_buf = system_allocator()(code_buf_size, 0x1000,
     core::MemoryRegion::AllocateExecutable | core::MemoryRegion::AllocateExecutableBlitKernelObject);
-  assert(code_buf != NULL && "Code buffer allocation failed");
+  assert(code_buf != nullptr && "Code buffer allocation failed");
 
   memset(code_buf, 0, code_buf_size);
 
@@ -890,7 +890,7 @@ core::Blit* GpuAgent::CreateBlitKernel(core::Queue* queue) {
   if (kernl->Initialize(*this) != HSA_STATUS_SUCCESS) {
     kernl->Destroy();
     delete kernl;
-    kernl = NULL;
+    kernl = nullptr;
   }
 
   return kernl;
@@ -971,7 +971,7 @@ void GpuAgent::InitDma() {
     // the status of available SDMA HW resources without a fallback.
     // Call to isSDMA should be used as a proxy error check if !blit_copy_fallback.
     auto ret = pending_copy_stat_check_ref_.load(std::memory_order_acquire) ?
-                                              new AMD::BlitKernel(NULL) :
+                                              new AMD::BlitKernel(nullptr) :
                                               CreateBlitKernel((*queue).get());
     if (ret == nullptr)
       throw AMD::hsa_exception(HSA_STATUS_ERROR_OUT_OF_RESOURCES, "Blit creation failed.");
@@ -1066,7 +1066,7 @@ void GpuAgent::ReleaseResources() {
     scratch_cache_.trim(true);
     scratch_cache_.free_reserve();
 
-    if (scratch_pool_.base() != NULL) {
+    if (scratch_pool_.base() != nullptr) {
       driver().FreeMemory(scratch_pool_.base(), scratch_pool_.size());
     }
 
@@ -1075,7 +1075,7 @@ void GpuAgent::ReleaseResources() {
 
     system_deallocator()(doorbell_queue_map_);
 
-    if (trap_code_buf_ != NULL)
+    if (trap_code_buf_ != nullptr)
       system_deallocator()(trap_code_buf_);
   }
 }
@@ -2244,15 +2244,15 @@ hsa_status_t GpuAgent::GetInfo(hsa_agent_info_t attribute, void* value) const {
         ((uint8_t*)value)[index] |= 1 << subBit;
       };
 
-      if (core::hsa_internal_api_table().finalizer_api.hsa_ext_program_finalize_fn != NULL) {
+      if (core::hsa_internal_api_table().finalizer_api.hsa_ext_program_finalize_fn != nullptr) {
         setFlag(HSA_EXTENSION_FINALIZER);
       }
 
-      if (core::hsa_internal_api_table().image_api.hsa_ext_image_create_fn != NULL) {
+      if (core::hsa_internal_api_table().image_api.hsa_ext_image_create_fn != nullptr) {
         setFlag(HSA_EXTENSION_IMAGES);
       }
 
-      if (core::hsa_internal_api_table().pcs_api.hsa_ven_amd_pcs_iterate_configuration_fn != NULL) {
+      if (core::hsa_internal_api_table().pcs_api.hsa_ven_amd_pcs_iterate_configuration_fn != nullptr) {
         setFlag(HSA_EXTENSION_AMD_PC_SAMPLING);
       }
 
@@ -3164,7 +3164,7 @@ hsa_status_t GpuAgent::UpdateTrapHandlerWithPCS(pcs_sampling_data_t* pcs_hosttra
       auto cpuAgent = GetNearestCpuAgent()->public_handle();
 
       hsa_status_t allow_ret =
-          AMD::hsa_amd_agents_allow_access(1, &cpuAgent, NULL, trap_handler_tma_region_);
+          AMD::hsa_amd_agents_allow_access(1, &cpuAgent, nullptr, trap_handler_tma_region_);
       if (allow_ret != HSA_STATUS_SUCCESS) {
         finegrain_deallocator()(trap_handler_tma_region_);
         trap_handler_tma_region_ = nullptr;
@@ -3180,7 +3180,7 @@ hsa_status_t GpuAgent::UpdateTrapHandlerWithPCS(pcs_sampling_data_t* pcs_hosttra
     tma_addr = trap_handler_tma_region_;
   } else if (trap_handler_tma_region_) {
     finegrain_deallocator()(trap_handler_tma_region_);
-    trap_handler_tma_region_ = NULL;
+    trap_handler_tma_region_ = nullptr;
   }
 
   // Bind the trap handler to this node.
@@ -3219,7 +3219,7 @@ void GpuAgent::BindTrapHandler() {
     auto doorbell_queue_map_size = MAX_NUM_DOORBELLS * sizeof(amd_queue_v2_t*);
 
     doorbell_queue_map_ = (amd_queue_v2_t**)system_allocator()(doorbell_queue_map_size, 0x1000, 0);
-    if (doorbell_queue_map_ == NULL) {
+    if (doorbell_queue_map_ == nullptr) {
       throw AMD::hsa_exception(HSA_STATUS_ERROR_OUT_OF_RESOURCES,
                                "Doorbell queue map allocation failed.");
     }
@@ -3508,7 +3508,7 @@ hsa_status_t GpuAgent::PcSamplingIterateConfig(hsa_ven_amd_pcs_iterate_configura
     return HSA_STATUS_ERROR;
 
   // First query to get size of list needed
-  HSAKMT_STATUS ret = HSAKMT_CALL(hsaKmtPcSamplingQueryCapabilities(node_id(), NULL, 0, &size));
+  HSAKMT_STATUS ret = HSAKMT_CALL(hsaKmtPcSamplingQueryCapabilities(node_id(), nullptr, 0, &size));
   if (ret != HSAKMT_STATUS_SUCCESS || size == 0) return HSA_STATUS_ERROR;
 
   std::vector<HsaPcSamplingInfo> sampleInfoList(size);
@@ -3588,13 +3588,13 @@ hsa_status_t GpuAgent::PcSamplingCreateFromId(HsaPcSamplingTraceId ioctlId,
   pcs_data->cmd_data = (uint32_t*)malloc(pcs_data->cmd_data_sz);
   if (!pcs_data->cmd_data) return HSA_STATUS_ERROR_OUT_OF_RESOURCES;
 
-  if (HSA::hsa_signal_create(1, 0, NULL, &pcs_data->exec_pm4_signal) != HSA_STATUS_SUCCESS)
+  if (HSA::hsa_signal_create(1, 0, nullptr, &pcs_data->exec_pm4_signal) != HSA_STATUS_SUCCESS)
     return HSA_STATUS_ERROR;
 
   pcs_data->old_val = (uint64_t*)system_allocator()(sizeof(uint64_t), 0x1000, 0);
   if (!pcs_data->old_val) return HSA_STATUS_ERROR_OUT_OF_RESOURCES;
 
-  if (AMD::hsa_amd_agents_allow_access(1, &public_handle_, NULL, pcs_data->old_val))
+  if (AMD::hsa_amd_agents_allow_access(1, &public_handle_, nullptr, pcs_data->old_val))
     return HSA_STATUS_ERROR;
 
   // Local copy of pc sampling data - we cannot access device memory directly on non-large BAR
@@ -3607,7 +3607,7 @@ hsa_status_t GpuAgent::PcSamplingCreateFromId(HsaPcSamplingTraceId ioctlId,
 
   memset(device_datahost, 0, sizeof(*device_datahost));
 
-  if (AMD::hsa_amd_agents_allow_access(1, &public_handle_, NULL, device_datahost) !=
+  if (AMD::hsa_amd_agents_allow_access(1, &public_handle_, nullptr, device_datahost) !=
       HSA_STATUS_SUCCESS)
     return HSA_STATUS_ERROR;
 
@@ -3682,16 +3682,16 @@ hsa_status_t GpuAgent::PcSamplingCreateFromId(HsaPcSamplingTraceId ioctlId,
     pcs_data->host_buffer = (uint8_t*)system_allocator()(pcs_data->host_buffer_size, 0x1000, 0);
     if (!pcs_data->host_buffer) return HSA_STATUS_ERROR_OUT_OF_RESOURCES;
 
-    if (AMD::hsa_amd_agents_allow_access(1, &public_handle_, NULL, pcs_data->host_buffer) !=
+    if (AMD::hsa_amd_agents_allow_access(1, &public_handle_, nullptr, pcs_data->host_buffer) !=
         HSA_STATUS_SUCCESS)
       return HSA_STATUS_ERROR;
 
     device_datahost->buf_size = trap_buffer_size / session.sample_size();
 
-    if (HSA::hsa_signal_create(1, 0, NULL, &device_datahost->done_sig0) != HSA_STATUS_SUCCESS)
+    if (HSA::hsa_signal_create(1, 0, nullptr, &device_datahost->done_sig0) != HSA_STATUS_SUCCESS)
       return HSA_STATUS_ERROR_OUT_OF_RESOURCES;
 
-    if (HSA::hsa_signal_create(1, 0, NULL, &device_datahost->done_sig1) != HSA_STATUS_SUCCESS)
+    if (HSA::hsa_signal_create(1, 0, nullptr, &device_datahost->done_sig1) != HSA_STATUS_SUCCESS)
       return HSA_STATUS_ERROR_OUT_OF_RESOURCES;
 
     // TODO: Once we have things working and can measure
@@ -3706,7 +3706,7 @@ hsa_status_t GpuAgent::PcSamplingCreateFromId(HsaPcSamplingTraceId ioctlId,
 
     // This cpuAgent is the owner of the system_allocator() pool
     auto cpuAgent = GetNearestCpuAgent()->public_handle();
-    if (AMD::hsa_amd_agents_allow_access(1, &cpuAgent, NULL, pcs_data->device_data) != HSA_STATUS_SUCCESS)
+    if (AMD::hsa_amd_agents_allow_access(1, &cpuAgent, nullptr, pcs_data->device_data) != HSA_STATUS_SUCCESS)
       return HSA_STATUS_ERROR;
 
     if (DmaCopy(pcs_data->device_data, device_datahost, sizeof(*device_datahost)) !=
@@ -3782,9 +3782,9 @@ hsa_status_t GpuAgent::PcSamplingDestroy(pcs::PcsRuntime::PcSamplingSession& ses
   finegrain_deallocator()(pcs_data->device_data);
   system_deallocator()(pcs_data->host_buffer);
 
-  pcs_data->device_data = NULL;
-  pcs_data->host_buffer = NULL;
-  pcs_data->session = NULL;
+  pcs_data->device_data = nullptr;
+  pcs_data->host_buffer = nullptr;
+  pcs_data->session = nullptr;
 
   // Update the trap handler to clear any associated device data
   UpdateTrapHandlerWithPCS(nullptr, nullptr);
