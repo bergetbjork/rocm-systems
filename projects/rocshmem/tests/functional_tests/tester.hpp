@@ -178,7 +178,9 @@
   X(TileBroadcastWG,           133)  \
   X(TileAllgather,             134)  \
   X(TileAllgatherWave,         135)  \
-  X(TileAllgatherWG,           136)
+  X(TileAllgatherWG,           136)  \
+  X(AllToAllWave,              137)
+
 #define _ROCSHMEM_ENUM_ENTRY(name, val) name##TestType = val,
 enum TestType {
   ROCSHMEM_FOREACH_TEST_TYPE(_ROCSHMEM_ENUM_ENTRY)
