@@ -85,7 +85,7 @@ namespace {
 
 // Reimplements logic from hipfile/tools/ais-check/ais-check.
 AisCapability
-detectAisCapability()
+AisCapability::detectAisCapability()
 {
     AisCapability cap;
     cap.kernel_ais  = kernelSupportsAis();
@@ -100,7 +100,7 @@ detectAisCapability()
 }
 
 bool
-fastpathAvailable()
+AisCapability::fastpathAvailable()
 {
     return detectAisCapability().fastpath_available();
 }

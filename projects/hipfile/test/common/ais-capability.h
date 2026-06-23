@@ -18,10 +18,10 @@ struct AisCapability {
     {
         return kernel_ais && hip_runtime && amdgpu;
     }
+
+    static AisCapability detectAisCapability();
+
+    static bool fastpathAvailable();
 };
-
-AisCapability detectAisCapability();
-
-bool fastpathAvailable();
 
 }
