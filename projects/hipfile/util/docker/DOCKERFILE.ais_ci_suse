@@ -70,8 +70,7 @@ RUN zypper install -y \
         llvm19-devel \
         python312-devel \
         rocm-device-libs \
-        rpm-build \
-        zlib-devel
+        rpm-build
 
 # Configure system linker for ROCm
 RUN cat <<EOF > /etc/ld.so.conf.d/rocm.conf

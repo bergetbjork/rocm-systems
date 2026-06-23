@@ -63,11 +63,6 @@ ais_add_test_executable(
 )
 target_link_libraries(hipfile_system_tests PRIVATE GTest::gtest)
 
-if(NOT AIS_BUILD_NVIDIA_DETAIL)
-    find_package(ZLIB REQUIRED)
-    target_link_libraries(hipfile_system_tests PRIVATE ZLIB::ZLIB)
-endif()
-
 ais_gtest_discover_tests(
     hipfile_system_tests
     EXTRA_ARGS --ais-capable-dir ${AIS_CAPABLE_DIR}

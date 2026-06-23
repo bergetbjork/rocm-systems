@@ -72,8 +72,7 @@ RUN dnf makecache && \
         libmount-devel \
         llvm-devel \
         python3.12-devel \
-        rpm-build \
-        zlib-devel
+        rpm-build
 
 # Build and install a fixed oneTBB release.
 RUN curl -L --fail \

@@ -11,7 +11,6 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <zlib.h>
 
 namespace hipFile::test {
 
