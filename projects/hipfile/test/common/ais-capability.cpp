@@ -7,67 +7,56 @@
 
 #include "hip.h"
 
-#include <cstring>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <sys/utsname.h>
 #include <zlib.h>
 
 namespace hipFile::test {
 
 namespace {
 
-    bool kernelSupportsP2pdma()
+    // BIT6 of the KFD topology node "capability" field signals that amdgpu has
+    // initialized AIS on that node, implying the kernel supports P2PDMA.
+    constexpr uint64_t KFD_AIS_CAPABILITY_BIT = 0x40;
+
+    bool kernelSupportsAis()
     {
-        struct utsname uts;
-        if (::uname(&uts) != 0) {
-            std::cerr << "uname() failed; cannot determine kernel release\n";
-            return false;
-        }
-        const std::string release{uts.release};
+        const std::string topology_nodes = "/sys/class/kfd/kfd/topology/nodes";
 
-        const std::string plain_config = "/boot/config-" + release;
-        const std::string build_config = "/lib/modules/" + release + "/build/.config";
+        bool any_gpu = false;
 
-        auto is_match = [](const std::string &line) {
-            return line.rfind("CONFIG_PCI_P2PDMA=y", 0) == 0 || line.rfind("CONFIG_PCI_P2PDMA=m", 0) == 0;
-        };
-
-        bool configs_found = false;
-
-        // Plain-text config sources.
-        for (const std::string &path : {plain_config, build_config}) {
-            std::ifstream in{path};
+        for (int id = 0;; ++id) {
+            const std::string props_path = topology_nodes + "/" + std::to_string(id) + "/properties";
+            std::ifstream     in{props_path};
             if (!in.is_open()) {
-                continue;
+                break;
             }
-            configs_found = true;
-            std::string line;
-            while (std::getline(in, line)) {
-                if (is_match(line)) {
-                    return true;
+
+            uint64_t    capability = 0;
+            uint32_t    simd_count = 0;
+            std::string key;
+            uint64_t    value;
+            while (in >> key >> value) {
+                if (key == "capability") {
+                    capability = value;
                 }
+                else if (key == "simd_count") {
+                    simd_count = static_cast<uint32_t>(value);
+                }
+            }
+
+            if (simd_count == 0) {
+                continue; // Not a GPU, disregard
+            }
+            any_gpu = true;
+            if ((capability & KFD_AIS_CAPABILITY_BIT) == 0) {
+                return false;
             }
         }
 
-        // Gzipped config exposed by the running kernel.
-        if (gzFile gz = gzopen("/proc/config.gz", "rb")) {
-            configs_found = true;
-            char buf[512];
-            while (gzgets(gz, buf, static_cast<int>(sizeof(buf))) != nullptr) {
-                if (is_match(std::string{buf})) {
-                    gzclose(gz);
-                    return true;
-                }
-            }
-            gzclose(gz);
-        }
-
-        if (!configs_found) {
-            std::cerr << "No kernel config files found!\n";
-        }
-        return false;
+        return any_gpu;
     }
 
     bool hipRuntimeSupportsAis()
@@ -99,13 +88,13 @@ AisCapability
 detectAisCapability()
 {
     AisCapability cap;
-    cap.kernel_p2pdma = kernelSupportsP2pdma();
-    cap.hip_runtime   = hipRuntimeSupportsAis();
-    cap.amdgpu        = amdgpuSupportsAis();
+    cap.kernel_ais  = kernelSupportsAis();
+    cap.hip_runtime = hipRuntimeSupportsAis();
+    cap.amdgpu      = amdgpuSupportsAis();
 
-    std::cerr << "AIS kernel P2PDMA support: " << (cap.kernel_p2pdma ? "yes" : "no") << "\n";
-    std::cerr << "AIS HIP runtime support:   " << (cap.hip_runtime ? "yes" : "no") << "\n";
-    std::cerr << "AIS amdgpu support:        " << (cap.amdgpu ? "yes" : "no") << "\n";
+    std::cerr << "AIS kernel AIS-init support: " << (cap.kernel_ais ? "yes" : "no") << "\n";
+    std::cerr << "AIS HIP runtime support:     " << (cap.hip_runtime ? "yes" : "no") << "\n";
+    std::cerr << "AIS amdgpu support:          " << (cap.amdgpu ? "yes" : "no") << "\n";
 
     return cap;
 }
