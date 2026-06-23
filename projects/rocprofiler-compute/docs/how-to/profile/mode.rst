@@ -264,6 +264,25 @@ The output directory can be parameterized with the following keywords:
 If MPI rank is detected and the output directory does not include ``%rank%``,
 ROCm Compute Profiler appends ``/<rank>`` to avoid collisions across ranks.
 
+Each profiling run should use a fresh output directory. A workload directory
+holds the output of exactly one run, so profiling into a non-empty directory
+fails with an error rather than silently mixing runs. To re-profile in place,
+add ``--overwrite``, which clears the directory first:
+
+.. code-block:: shell-session
+
+   $ rocprof-compute profile --name vcopy --overwrite -- ./vcopy -n 1048576 -b 256
+
+.. warning::
+
+   ``--overwrite`` deletes the target directory's existing contents. Nothing is
+   removed without it.
+
+.. note::
+
+   Automated runs should never reuse a workload directory: profile into a fresh
+   directory each time, or pass ``--overwrite``.
+
 Examples:
 
 * Profiling without MPI:
@@ -833,25 +852,28 @@ To target a specific GPU device, use ``--device``:
 
    $ rocprof-compute profile --name my_bench --bench-only --device 2
 
-To regenerate benchmark data in an existing profiled workload directory, use
-``--output-directory`` to point at the workload path directly:
+To regenerate benchmark data in an existing workload directory, point
+``--output-directory`` at the workload path. This replaces the existing
+``roofline.csv``, so it requires ``--overwrite``. Unlike a full profile,
+``--bench-only`` replaces only ``roofline.csv`` and leaves the rest of the
+workload (counter data, traces) untouched:
 
 .. code-block:: shell-session
 
-   $ rocprof-compute profile --bench-only --output-directory workloads/vcopy/MI300X_A1
+   $ rocprof-compute profile --bench-only --overwrite --output-directory workloads/vcopy/MI300X_A1
 
 .. note::
 
    ``--bench-only`` writes ``roofline.csv`` only; rendering a roofline
    chart additionally requires application performance counters from a
    ``--roof-only`` (or regular profile) run. The intended workflow is to
-   profile first, then re-run ``--bench-only`` against that workload
+   profile first, then re-run ``--bench-only --overwrite`` against that workload
    later to refresh stale peak values before analyzing:
 
    .. code-block:: shell-session
 
       $ rocprof-compute profile --name vcopy --roof-only -- ./vcopy
-      $ rocprof-compute profile --bench-only --output-directory workloads/vcopy/MI300X_A1
+      $ rocprof-compute profile --bench-only --overwrite --output-directory workloads/vcopy/MI300X_A1
       $ rocprof-compute analyze --path workloads/vcopy/MI300X_A1
 
 .. _torch-operator-mapping:
@@ -922,19 +944,36 @@ option when profiling a PyTorch workload:
    INFO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    ...
 
+Reducing instrumentation overhead
+---------------------------------
+
+By default, ``--torch-trace`` also wraps the device- and layout-related
+``torch.Tensor`` methods ``to``, ``cpu``, ``cuda``, and ``contiguous``, which
+attribute tensor movement and layout changes to the originating PyTorch call
+site. These methods are called frequently, so wrapping them adds overhead and
+increases the trace size.
+
+Set the ``ROCPROFCOMPUTE_ROCTX_DEEP_TENSOR_WRAPS`` environment variable to
+``0`` (or ``false``, ``no``, ``off``) in the workload environment to disable
+these wraps. ``ROCPROFCOMPUTE_ROCTX_DEEP_TENSOR_WRAPS`` is enabled by default.
+
+.. code-block:: shell-session
+
+   $ ROCPROFCOMPUTE_ROCTX_DEEP_TENSOR_WRAPS=0 rocprof-compute profile --experimental --torch-trace --name mnist_torch -- python train.py
+
 Output
 ------
 
 When Torch operator mapping is enabled, profiling writes additional CSV files in
 the workload directory: **marker_api_trace** and **counter_collection** files with
-the ``torch_trace`` prefix. These correlate PyTorch operators
+the ``ml_api_trace`` prefix. These correlate PyTorch operators
 with GPU kernels and performance counters. When you run analyze (e.g. with
 ``--list-torch-operators`` or ``--torch-operator``), a consolidated CSV is written
-to ``torch_trace/consolidated.csv``; the source marker and counter files are
+to ``ml_api_trace/consolidated.csv``; the source marker and counter files are
 **retained** in the workload directory and are not deleted.
 
-``torch_trace/`` directory
-The ``torch_trace/`` directory contains ``consolidated.csv`` with all
+``ml_api_trace/`` directory
+The ``ml_api_trace/`` directory contains ``consolidated.csv`` with all
 operator/kernel data. The columns include:
 
    * ``Operator_Name``: Full operator hierarchy (e.g. ``nn.Module.Net.forward/nn.Module.Conv2d.forward/torch.nn.functional.relu``, ``nn.Module.ResNet.forward/torch.nn.functional.relu``).
@@ -947,7 +986,7 @@ The consolidated CSV is generated automatically on the first analysis run that
 requires it (``--list-torch-operators`` or ``--torch-operator``) and is reused on
 subsequent runs.
 
-Sample rows from ``torch_trace/consolidated.csv`` (from profiling an mnist model).
+Sample rows from ``ml_api_trace/consolidated.csv`` (from profiling an mnist model).
 
 .. list-table::
    :header-rows: 1
@@ -1034,7 +1073,7 @@ operator occurs in your PyTorch application:
    nn.Module.MyModel.forward/nn.Module.Linear.forward
    torch.nn.functional.relu
 
-The ``Operator_Name`` column in ``torch_trace/consolidated.csv`` contains
+The ``Operator_Name`` column in ``ml_api_trace/consolidated.csv`` contains
 the full operator hierarchy.
 
 This hierarchical information enables:

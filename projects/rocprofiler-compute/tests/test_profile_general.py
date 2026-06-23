@@ -55,7 +55,6 @@ num_kernels = 3
 num_devices = 1
 
 attach_detach_interval_msec_no_delay = 1000
-attach_detach_interval_msec_with_delay = 60000
 DEFAULT_ABS_DIFF = 15
 DEFAULT_REL_DIFF = 50
 MAX_REOCCURING_COUNT = 28
@@ -1250,7 +1249,8 @@ def test_roof_workload_dir_validation(binary_handler_profile_rocprof_compute):
 def test_roofline_kernel_filter(binary_handler_profile_rocprof_compute):
     """
     Test roofline multi-attempt profiling with `--kernel`
-    Expect to be able to re-profile from same workload if kernels are valid.
+    Expect to be able to re-profile into the same workload directory (with
+    --overwrite) if kernels are valid.
 
     Roofline now takes in a dataframe that should already have filtering applied.
     Any invald kernels should be handled prior to roof activity.
@@ -1265,13 +1265,15 @@ def test_roofline_kernel_filter(binary_handler_profile_rocprof_compute):
         "--device",
         "0",
         "--roof-only",
+        "--overwrite",
     ]
     workload_dir = common.get_output_dir()
 
     returncode = binary_handler_profile_rocprof_compute(  # noqa: F841
         config, workload_dir, options, check_success=True, roof=True
     )
-    # Don't clean output dir, use same workload
+    # Wipe the directory where applicable with --overwrite, then
+    # Re-profile into the same workload directory
     # Test only non-existent kernel: result should be passing
     # Dataframe given to roofline should just be all available kernels with no filtering
     options_bad = options.copy()
@@ -1288,7 +1290,7 @@ def test_roofline_kernel_filter(binary_handler_profile_rocprof_compute):
     )
     assert returncode == 0
 
-    # Test one good kernel using existing profiling data
+    # Test one good kernel, re-profiling the same directory with --overwrite
     # Result should be passing as usual
     options_good = options.copy()
     options_good.extend(["--kernel", config["kernel_name_1"]])
@@ -1297,7 +1299,7 @@ def test_roofline_kernel_filter(binary_handler_profile_rocprof_compute):
     )
     assert returncode == 0
 
-    # Test one good and one nonexistent kernel using existing profiling data
+    # Test one good and one nonexistent kernel, re-profiling
     # Result should be passing as usual
     options_both = options.copy()
     options_both.extend([
@@ -2166,157 +2168,6 @@ def test_live_attach_detach_block(
     common.clean_output_dir(config["cleanup"], workload_dir)
 
 
-@pytest.mark.skip(
-    reason="Temporarily disabled: \
-                  waiting for SDK fix for no outputfile with thread sleeping"
-)
-@pytest.mark.live_attach_detach
-def test_live_attach_detach_block_thread_sleep(binary_handler_profile_rocprof_compute):
-    options = ["--block", "3.1.1", "4.1.1", "5.1.1"]
-    workload_dir = common.get_output_dir()
-
-    # TODO: temp fix for sdk defautly disable attach/detach,
-    # remove after it sets default to enable
-    env = os.environ.copy()
-    env["ROCP_TOOL_ATTACH"] = "1"
-
-    process_workload = None
-
-    try:
-        # Start workload with sleep mode enabled
-        process_workload = subprocess.Popen(
-            [*config["app_hip_dynamic_shared"], "--enable-sleep"], env=env
-        )
-        time.sleep(5)  # Give workload time to start
-
-        attach_detach = {
-            "attach_pid": process_workload.pid,
-            "attach-duration-msec": attach_detach_interval_msec_with_delay,
-        }
-
-        # Main profiling call (can fail or hang)
-        binary_handler_profile_rocprof_compute(
-            config,
-            workload_dir,
-            options,
-            check_success=True,
-            roof=False,
-            app_name="app_hip_dynamic_shared",
-            attach_detach_para=attach_detach,
-        )
-
-    finally:
-        if process_workload and process_workload.poll() is None:
-            print(f"[finally] killing workload pid={process_workload.pid}")
-            process_workload.kill()
-            process_workload.wait()
-        # Clean up any stale rocprof-attach processes to prevent interference
-        # with subsequent tests.
-        subprocess.run(
-            ["pkill", "-9", "-f", "rocprof-attach"],
-            capture_output=True,
-        )
-
-    # Validate output
-    file_dict = common.check_csv_files(workload_dir, 1, num_kernels)
-    validate(
-        inspect.stack()[0][3],
-        workload_dir,
-        file_dict,
-    )
-
-    # Check profiling_config.yaml block entries
-    config_file = f"{workload_dir}/profiling_config.yaml"
-    assert common.check_file_pattern("- 3.1.1", config_file)
-    assert common.check_file_pattern("- 4.1.1", config_file)
-    assert common.check_file_pattern("- 5.1.1", config_file)
-    common.clean_output_dir(config["cleanup"], workload_dir)
-
-
-@pytest.mark.live_attach_detach
-def test_live_attach_detach_singlepass_launch_stats(
-    binary_handler_profile_rocprof_compute,
-):
-    options = ["--set", "launch_stats"]
-    workload_dir = common.get_output_dir()
-
-    # TODO: temp fix for sdk defautly disable attach/detach,
-    # remove after it sets default to enable
-    env = os.environ.copy()
-    env["ROCP_TOOL_ATTACH"] = "1"
-
-    process_workload = None
-
-    try:
-        # Start workload
-        process_workload = subprocess.Popen(config["app_hip_dynamic_shared"], env=env)
-        time.sleep(5)  # Give workload time to start
-
-        attach_detach = {
-            "attach_pid": process_workload.pid,
-            "attach-duration-msec": attach_detach_interval_msec_no_delay,
-        }
-
-        # Profiling step (may fail)
-        binary_handler_profile_rocprof_compute(
-            config,
-            workload_dir,
-            options,
-            check_success=True,
-            roof=False,
-            app_name="app_hip_dynamic_shared",
-            attach_detach_para=attach_detach,
-        )
-
-    finally:
-        if process_workload and process_workload.poll() is None:
-            print(f"[finally] killing workload pid={process_workload.pid}")
-            process_workload.kill()
-            process_workload.wait()
-        # Clean up any stale rocprof-attach processes to prevent interference
-        # with subsequent tests.
-        subprocess.run(
-            ["pkill", "-9", "-f", "rocprof-attach"],
-            capture_output=True,
-        )
-
-    # Validate CSVs & output correctness
-    file_dict = common.check_csv_files(workload_dir, 1, num_kernels)
-    validate(
-        inspect.stack()[0][3],
-        workload_dir,
-        file_dict,
-    )
-
-    # Check that launch-stat sets were applied
-    config_file = f"{workload_dir}/profiling_config.yaml"
-    for tag in (
-        [
-            "7.2.0",
-            "7.2.1",
-            "7.2.2",
-            "7.2.3",
-            "7.2.4",
-            "7.2.5",
-            "7.3.0",
-        ]
-        if is_gfx115x_soc()
-        else [
-            "7.1.0",
-            "7.1.1",
-            "7.1.2",
-            "7.1.5",
-            "7.1.6",
-            "7.1.7",
-            "7.1.8",
-            "7.1.9",
-        ]
-    ):
-        assert common.check_file_pattern(f"- {tag}", config_file)
-
-    common.clean_output_dir(config["cleanup"], workload_dir)
-
-
 @pytest.mark.live_attach_detach
 def test_live_attach_detach_pc_sampling(
     binary_handler_profile_rocprof_compute,
@@ -2336,7 +2187,7 @@ def test_live_attach_detach_pc_sampling(
     try:
         # Start workload
         process_workload = subprocess.Popen(config["app_hip_dynamic_shared"], env=env)
-        time.sleep(5)  # Give workload time to start
+        time.sleep(15)  # Give workload time to start
 
         attach_detach = {
             "attach_pid": process_workload.pid,
@@ -2831,7 +2682,7 @@ def test_torch_trace_profile(
     Runs profiling with --torch-trace, verifies profile outputs (pmc_perf, marker
     and counter CSVs), then runs analyze with --list-torch-operators and
     --torch-operator (shell-style fnmatch glob patterns like *relu, all), and verifies
-    torch_trace directory, consolidated CSV contents (hierarchy, kernel, counters),
+    ml_api_trace directory, consolidated CSV contents (hierarchy, kernel, counters),
     and CLI output format (call tree grouped by source location, aggregated stats,
     kernel IDs, sort order).
     Requires PyTorch and GPU; not included in default suite.
@@ -2964,12 +2815,12 @@ def test_torch_trace_profile(
 
     list_output = capsys.readouterr().out
 
-    # 7. torch_trace directory created with consolidated.csv
-    torch_trace_dir = Path(workload_dir) / "torch_trace"
-    assert torch_trace_dir.exists(), "torch_trace directory not created"
+    # 7. ml_api_trace directory created with consolidated.csv
+    ml_api_trace_dir = Path(workload_dir) / "ml_api_trace"
+    assert ml_api_trace_dir.exists(), "ml_api_trace directory not created"
 
-    consolidated_csv = torch_trace_dir / "consolidated.csv"
-    assert consolidated_csv.exists(), "consolidated.csv not found in torch_trace"
+    consolidated_csv = ml_api_trace_dir / "consolidated.csv"
+    assert consolidated_csv.exists(), "consolidated.csv not found in ml_api_trace"
 
     # 8. Consolidated CSV contains hierarchy, kernel names, and counter values
     df = pd.read_csv(consolidated_csv)

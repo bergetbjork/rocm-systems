@@ -545,11 +545,27 @@ add_test(
 )
 
 add_test(
-    NAME test_roofline_calc_ai_analyze
+    NAME test_roofline_calc
     COMMAND
         ${PYTHON_TEST_COMMAND} -m pytest ${STANDALONEBINARY_TEST_OPTION}
-        --junitxml=tests/test_roofline_calc_ai_analyze.xml ${COV_OPTION}
-        tests/test_roofline_calc_ai_analyze.py ${WORKING_DIR_OPTION}
+        --junitxml=tests/test_roofline_calc.xml ${COV_OPTION} tests/test_roofline_calc.py
+        ${WORKING_DIR_OPTION}
+)
+
+add_test(
+    NAME test_roofline_analyze
+    COMMAND
+        ${PYTHON_TEST_COMMAND} -m pytest ${STANDALONEBINARY_TEST_OPTION}
+        --junitxml=tests/test_roofline_analyze.xml ${COV_OPTION}
+        tests/test_roofline_analyze.py ${WORKING_DIR_OPTION}
+)
+
+add_test(
+    NAME test_roofline_main
+    COMMAND
+        ${PYTHON_TEST_COMMAND} -m pytest ${STANDALONEBINARY_TEST_OPTION}
+        --junitxml=tests/test_roofline_main.xml ${COV_OPTION} tests/test_roofline_main.py
+        ${WORKING_DIR_OPTION}
 )
 
 # -----------------------------------
@@ -593,6 +609,26 @@ add_test(
     COMMAND
         ${PYTHON_TEST_COMMAND} -m pytest ${STANDALONEBINARY_TEST_OPTION}
         --junitxml=tests/test_parser.xml ${COV_OPTION} tests/test_parser.py
+        ${WORKING_DIR_OPTION}
+)
+
+add_test(
+    NAME test_metrics_common
+    COMMAND
+        ${PYTHON_TEST_COMMAND} -m pytest ${STANDALONEBINARY_TEST_OPTION}
+        --junitxml=tests/test_metrics_common.xml ${COV_OPTION}
+        tests/test_metrics_common.py ${WORKING_DIR_OPTION}
+)
+
+# -----------------------------------
+# CLI options unit tests
+# -----------------------------------
+
+add_test(
+    NAME test_argparser
+    COMMAND
+        ${PYTHON_TEST_COMMAND} -m pytest ${STANDALONEBINARY_TEST_OPTION}
+        --junitxml=tests/test_argparser.xml ${COV_OPTION} tests/test_argparser.py
         ${WORKING_DIR_OPTION}
 )
 
@@ -676,13 +712,20 @@ set_tests_properties(
 )
 
 add_test(
-    NAME test_inject_roctx_loader
+    NAME test_torch_cpp_loader
     COMMAND
         ${PYTHON_TEST_COMMAND} -m pytest ${STANDALONEBINARY_TEST_OPTION}
-        --junitxml=tests/test_inject_roctx_loader.xml ${COV_OPTION}
-        tests/test_inject_roctx_loader.py ${WORKING_DIR_OPTION}
+        --junitxml=tests/test_torch_cpp_loader.xml ${COV_OPTION}
+        tests/test_torch_cpp_loader.py ${WORKING_DIR_OPTION}
 )
-set_tests_properties(test_inject_roctx_loader PROPERTIES TIMEOUT 300)
+
+add_test(
+    NAME test_inject_roctx_package
+    COMMAND
+        ${PYTHON_TEST_COMMAND} -m pytest ${STANDALONEBINARY_TEST_OPTION}
+        --junitxml=tests/test_inject_roctx_package.xml ${COV_OPTION}
+        tests/test_inject_roctx_package.py ${WORKING_DIR_OPTION}
+)
 
 # ---------------------------------------
 # Pure csv compatibility layer for pandas
@@ -732,6 +775,18 @@ add_test(
         ${WORKING_DIR_OPTION}
 )
 
+# -----------------------------------
+# TTY table rendering unit tests
+# -----------------------------------
+
+add_test(
+    NAME test_tty
+    COMMAND
+        ${PYTHON_TEST_COMMAND} -m pytest ${STANDALONEBINARY_TEST_OPTION}
+        --junitxml=tests/test_tty.xml ${COV_OPTION} tests/test_tty.py
+        ${WORKING_DIR_OPTION}
+)
+
 if(TARGET test-rocprofiler-compute-tool)
     if(TEST_FROM_INSTALL)
         set(_tool_test_cmd tests/test-rocprofiler-compute-tool)
@@ -771,20 +826,24 @@ if(${ENABLE_COVERAGE})
         test_analyze_workloads
         test_metric_utils
         test_parser
+        test_argparser
         test_L1_cache_counters
         test_num_xcds_spec_class
         test_num_xcds_cli_output
         test_mi_gpu_spec
         test_utils
         test_mem_chart
-        test_roofline_calc_ai_analyze
+        test_roofline_calc
+        test_roofline_analyze
+        test_roofline_main
         test_data_imputation
         test_autogen_config
         test_tui_components
         test_torch_trace_analysis
         test_torch_trace_coverage
         test_profile_torch_trace
-        test_inject_roctx_loader
+        test_torch_cpp_loader
+        test_inject_roctx_package
     )
 
     string(REPLACE ";" ";" ALL_TESTS_STRING "${ALL_TEST_NAMES}")
@@ -861,8 +920,8 @@ install(
     PATTERN "rooflines*" EXCLUDE
     PATTERN "__pycache__" EXCLUDE
 )
-# Install the roctx_recordfn sources so the runtime loader can rebuild
-# the extension against the user's PyTorch environment on first use.
+# Install the roctx_recordfn sources so the runtime loader can build the
+# extension against the user's PyTorch environment on first use.
 install(
     DIRECTORY src/lib/roctx_recordfn
     DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/${PROJECT_NAME}/lib

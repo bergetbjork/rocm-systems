@@ -13,14 +13,14 @@ Full documentation for ROCm Compute Profiler is available at [https://rocm.docs.
 
 * Added backward compatibility for live attach mode to work with older ROCm 7.x.x releases.
 
-* Added support for GPU metrics on gfx1150 and gfx1152 hardware.
+* Added AMD Strix Point (gfx1150) and Krackan Point (gfx1152) support
 
-* Added GPU benchmarking support for gfx1150 and gfx1152 hardware.
-
-* Added Roofline profiling and analysis support for gfx1151 architecture
-  * gfx11 supports Wave Matrix Multiply Accumulate (WMMA), replacing MFMA operations
+* Added GPU Benchmarking and Roofline profiling/analysis support for gfx1150/gfx1151/gfx1152 architectures.
+  * gfx11 supports Wave Matrix Multiply Accumulate (WMMA), replacing MFMA operations.
 
 ### Changed
+
+* Renamed the `Pct of Peak` / `PoP` analysis column to `Percent of Peak` in analysis output.
 
 * Moved `--gui` and `--tui` analyze options to experimental status. These features now require the `--experimental` flag to be enabled (e.g., `rocprof-compute analyze --experimental --gui`).
 
@@ -34,6 +34,10 @@ Full documentation for ROCm Compute Profiler is available at [https://rocm.docs.
     * Min/Max/Mean and Total duration of kernel dispatches
 
 * `--torch-trace` now captures backward-pass and nested operators that were previously missed or misattributed. The first run builds and caches a helper under `~/.cache/rocprofiler-compute/`, so it takes longer than later runs.
+
+* `--torch-trace` now wraps the tensor methods `to`, `cpu`, `cuda`, and `contiguous` by default. Previously these wraps were enabled by setting `ROCPROFCOMPUTE_ROCTX_DEEP_TENSOR_WRAPS=1`. Set `ROCPROFCOMPUTE_ROCTX_DEEP_TENSOR_WRAPS=0` (or `false`, `no`, `off`) to disable them.
+
+* Renamed the torch-trace output files and directory from `torch_trace_*` to `ml_api_trace_*`.
 
 * Profile workload output folder name for Strix Halo series (gfx1151) is changed from `strix_halo` to `rdna35_halo`
 
@@ -75,9 +79,9 @@ Full documentation for ROCm Compute Profiler is available at [https://rocm.docs.
 
 * PC sampling collection now runs when requested via the `pc_sampling` block alias (`--block pc_sampling`), instead of being silently skipped
 
-### Upcoming changes
+* The Dual VALU (VOPD) instruction mix metric is now reported for gfx115x in the WGP panel.
 
-* Roofline support for RDNA 3.5 gfx1151 devices
+### Upcoming changes
 
 ### Known issues
 
