@@ -26,7 +26,7 @@ Full documentation for ROCm Compute Profiler is available at [https://rocm.docs.
 
 * Moved `--gui` and `--tui` analyze options to experimental status. These features now require the `--experimental` flag to be enabled (e.g., `rocprof-compute analyze --experimental --gui`).
 
-* `--output-format csv` in analyze mode now uses the database analysis workflow and produces one CSV per analysis view. Requires `--format-rocprof-output rocpd` and no longer prints the report to the terminal (matching `db` format).
+* `--output-format csv` in analyze mode now uses the database analysis workflow and produces one CSV per analysis view. Requires workloads profiled with the `rocpd` output format and no longer prints the report to the terminal (matching `db` format).
 
 * Changed ratio metric aggregation from `AVG(A/B)` (arithmetic mean of per-dispatch ratios) to `SUM(A)/SUM(B)` (ratio of totals) across all analysis YAML configurations and all GPU architectures. `SUM(A)/SUM(B)` is a weighted average where each dispatch contributes proportionally to its denominator magnitude (duration, access count, cycle count). Single-dispatch workloads are unaffected (mathematically identical). Multi-dispatch workloads with different kernels or varying durations will see corrected values.
 
@@ -58,6 +58,8 @@ Full documentation for ROCm Compute Profiler is available at [https://rocm.docs.
 * Profile mode now errors when the target workload directory is non-empty unless `--overwrite` is passed. `--bench-only` likewise requires `--overwrite` before replacing an existing `roofline.csv`.
 
 ### Removed
+
+* Removed the CSV profile output backend and the ``--format-rocprof-output`` profile mode option. Profiling now always uses the ``rocpd`` output format, which was already the default.
 
 * ``--path`` and ``--subpath`` options have been removed from profile mode. Use ``--output-directory`` instead.
 
