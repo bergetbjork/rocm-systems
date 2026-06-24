@@ -3,6 +3,8 @@
 
 #include "rocjitsu/kmd/linux/guest_kfd.h"
 
+#include "rocjitsu/kmd/linux/libc_passthrough.h"
+
 #include "util/log.h"
 
 #include <algorithm>
@@ -489,6 +491,7 @@ void TopologyOverlay::cleanup() {
 }
 
 GuestKfd::GuestKfd(config::DbtGuestConfig config) : config_(std::move(config)) {
+  libc_passthrough().resolve();
   guest_ = gpu_info_from_config(config_.guest_device);
   guest_.drm_render_minor = choose_render_minor(guest_.drm_render_minor);
   host_gpu_id_ = config_.host_gpu_id;
@@ -496,15 +499,15 @@ GuestKfd::GuestKfd(config::DbtGuestConfig config) : config_(std::move(config)) {
 
 GuestKfd::~GuestKfd() {
   if (synthetic_fd_ >= 0)
-    syscall(SYS_close, synthetic_fd_);
+    libc_passthrough().close(synthetic_fd_);
   if (real_kfd_fd_ >= 0)
-    syscall(SYS_close, real_kfd_fd_);
+    libc_passthrough().close(real_kfd_fd_);
 }
 
 bool GuestKfd::ensure_real_kfd() {
   if (real_kfd_fd_ >= 0)
     return true;
-  int fd = static_cast<int>(syscall(SYS_openat, AT_FDCWD, "/dev/kfd", O_RDWR | O_CLOEXEC, 0));
+  int fd = libc_passthrough().openat(AT_FDCWD, "/dev/kfd", O_RDWR | O_CLOEXEC, 0);
   if (fd < 0)
     return false;
   real_kfd_fd_ = fd;
@@ -553,7 +556,7 @@ int GuestKfd::close() { return 0; }
 int GuestKfd::forward_ioctl(unsigned long request, void *arg) {
   if (!ensure_real_kfd())
     return -1;
-  return static_cast<int>(syscall(SYS_ioctl, real_kfd_fd_, request, arg));
+  return libc_passthrough().ioctl(real_kfd_fd_, request, arg);
 }
 
 int GuestKfd::get_process_apertures_new(void *arg) {
@@ -815,11 +818,7 @@ void *GuestKfd::mmap(void *addr, size_t length, int prot, int flags, off_t offse
     errno = ENODEV;
     return MAP_FAILED;
   }
-  void *mapped =
-      reinterpret_cast<void *>(syscall(SYS_mmap, addr, length, prot, flags, real_kfd_fd_, offset));
-  if (reinterpret_cast<intptr_t>(mapped) < 0)
-    return MAP_FAILED;
-  return mapped;
+  return libc_passthrough().mmap(addr, length, prot, flags, real_kfd_fd_, offset);
 }
 
 int GuestKfd::munmap(void *, size_t) { return -ENOENT; }

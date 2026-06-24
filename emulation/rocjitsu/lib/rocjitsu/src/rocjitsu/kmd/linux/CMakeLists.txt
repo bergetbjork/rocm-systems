@@ -4,6 +4,7 @@
 rj_add_object_library(rocjitsu_kmd
     events.cpp
     guest_kfd.cpp
+    libc_passthrough.cpp
     linux_kfd.cpp
     remote_driver.cpp
     simulated_kfd.cpp
