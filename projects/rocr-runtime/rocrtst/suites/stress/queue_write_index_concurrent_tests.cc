@@ -50,6 +50,11 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <thread>
+#include <atomic>
+#include <chrono>
+#include <pthread.h>
+#include <sys/resource.h>
 
 #include "suites/stress/queue_write_index_concurrent_tests.h"
 #include "common/base_rocr_utils.h"
@@ -572,6 +577,236 @@ void QueueWriteIndexConcurrentTest::QueueLoadStoreWriteIndexAtomic(void) {
   for (unsigned int i = 0 ; i< gpus.size(); ++i) {
     QueueLoadStoreWriteIndexAtomic(cpus[0], gpus[i]);
   }
+
+  if (verbosity() > 0) {
+    std::cout << "subtest Passed" << std::endl;
+    std::cout << kSubTestSeparator << std::endl;
+  }
+}
+
+void QueueWriteIndexConcurrentTest::TestCasNoSpuriousWakeup(void) {
+  hsa_status_t err;
+
+  if (verbosity() > 0) {
+    PrintDebugSubtestHeader("Signal CAS No Spurious Wakeup - Performance Comparison");
+  }
+
+  pthread_t main_tid = pthread_self();
+  std::cout << "  [MAIN THREAD TID: " << main_tid << "]" << std::endl;
+
+  // Get CPU agent to use as consumer (forces InterruptSignal creation)
+  hsa_agent_t* cpu_agent_ptr = cpu_device();
+  ASSERT_NE(cpu_agent_ptr, nullptr);
+
+  std::cout << "\n  ===== TEST 1: CAS Conditional SetEvent =====" << std::endl;
+  std::cout << "  Testing with failing CAS operations (expected != actual)" << std::endl;
+  std::cout << "  Expected: Minimal context switches " << std::endl;
+
+  const int num_wait_iterations = 5;
+  long total_ctx_switches_test1 = 0;
+  long total_ctx_switches_test2 = 0;
+  long test1_duration_ms = 0;
+  long test2_duration_ms = 0;
+
+  // Test 1: Fixed implementation - CAS with wrong expected value (fails, no SetEvent)
+  {
+    hsa_signal_t signal;
+    err = hsa_signal_create(0, 1, cpu_agent_ptr, &signal);
+    ASSERT_EQ(err, HSA_STATUS_SUCCESS);
+
+    std::atomic<bool> stop_cas{false};
+    std::atomic<bool> waiter_ready{false};
+    const hsa_signal_value_t target_value = 100;
+
+    auto test1_start = std::chrono::steady_clock::now();
+
+    // Thread that performs failing CAS operations continuously
+    std::thread cas_thread([&]() {
+      pthread_t cas_tid = pthread_self();
+      std::cout << "  [CAS THREAD TID: " << cas_tid << "] Started" << std::endl;
+
+      int cas_count = 0;
+      while (!stop_cas.load(std::memory_order_acquire)) {
+        // Attempt CAS with wrong expected value - always fails
+        // SetEvent NOT called when CAS fails
+        hsa_signal_cas_relaxed(signal, 50, 75);
+        cas_count++;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      }
+      std::cout << "  [CAS THREAD TID: " << cas_tid << "] Performed " << cas_count
+                << " failing CAS operations" << std::endl;
+    });
+
+    // Give CAS thread time to start
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    // Waiter thread that repeatedly waits
+    std::thread waiter_thread([&]() {
+      pthread_t waiter_tid = pthread_self();
+      std::cout << "  [WAITER THREAD TID: " << waiter_tid << "] Started" << std::endl;
+
+      waiter_ready.store(true, std::memory_order_release);
+
+      struct rusage usage_start, usage_end;
+      getrusage(RUSAGE_THREAD, &usage_start);
+
+      for (int i = 0; i < num_wait_iterations; ++i) {
+        std::cout << "  [WAITER] Wait iteration " << (i+1) << "/" << num_wait_iterations << std::endl;
+
+        auto start = std::chrono::steady_clock::now();
+        hsa_signal_value_t observed = hsa_signal_wait_relaxed(
+            signal, HSA_SIGNAL_CONDITION_EQ, target_value,
+            200000000, HSA_WAIT_STATE_BLOCKED);  // 200ms timeout
+        auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - start).count();
+
+        std::cout << "    Returned after " << elapsed_ms << "ms (value=" << observed << ")" << std::endl;
+      }
+
+      getrusage(RUSAGE_THREAD, &usage_end);
+      long voluntary = usage_end.ru_nvcsw - usage_start.ru_nvcsw;
+      long involuntary = usage_end.ru_nivcsw - usage_start.ru_nivcsw;
+      total_ctx_switches_test1 = voluntary + involuntary;
+
+      std::cout << "  [WAITER THREAD TID: " << waiter_tid << "] Exiting" << std::endl;
+    });
+
+    // Wait for waiter to be ready
+    while (!waiter_ready.load(std::memory_order_acquire)) {
+      std::this_thread::yield();
+    }
+
+    waiter_thread.join();
+
+    // Stop CAS thread
+    stop_cas.store(true, std::memory_order_release);
+    cas_thread.join();
+
+    test1_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - test1_start).count();
+
+    std::cout << "\n  TEST 1 RESULTS:" << std::endl;
+    std::cout << "    Total context switches: " << total_ctx_switches_test1 << std::endl;
+    std::cout << "    Avg context switches per wait: "
+              << std::fixed << std::setprecision(1)
+              << (double)total_ctx_switches_test1 / num_wait_iterations << std::endl;
+    std::cout << "    Total time: " << test1_duration_ms << "ms" << std::endl;
+
+    hsa_signal_destroy(signal);
+
+    // Verify minimal context switches with fixed implementation
+    EXPECT_LT(total_ctx_switches_test1, 20)
+        << "Fixed CAS should have minimal context switches (< 20)";
+  }
+
+  std::cout << "\n  ===== TEST 2: Simulated Behavior: Unconditional Wake-ups =====" << std::endl;
+  std::cout << "  Testing with regular stores that always call SetEvent" << std::endl;
+  std::cout << "  Expected: High context switches " << std::endl;
+
+  // Test 2: Simulate behavior using regular stores (always triggers SetEvent)
+  {
+    hsa_signal_t signal;
+    err = hsa_signal_create(0, 1, cpu_agent_ptr, &signal);
+    ASSERT_EQ(err, HSA_STATUS_SUCCESS);
+
+    std::atomic<bool> stop_stores{false};
+    std::atomic<bool> waiter_ready{false};
+    const hsa_signal_value_t target_value = 100;
+
+    auto test2_start = std::chrono::steady_clock::now();
+
+    // Thread that performs stores (always calls SetEvent, simulating CAS)
+    std::thread store_thread([&]() {
+      pthread_t store_tid = pthread_self();
+      std::cout << "  [STORE THREAD TID: " << store_tid << "] Started" << std::endl;
+
+      int store_count = 0;
+      while (!stop_stores.load(std::memory_order_acquire)) {
+        // Regular store always calls SetEvent (simulates unconditional wake-up)
+        hsa_signal_store_relaxed(signal, 0);
+        store_count++;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      }
+
+      std::cout << "  [STORE THREAD TID: " << store_tid << "] Performed " << store_count
+                << " stores (each triggers SetEvent)" << std::endl;
+    });
+
+    // Give store thread time to start
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    // Waiter thread that repeatedly waits
+    std::thread waiter_thread([&]() {
+      pthread_t waiter_tid = pthread_self();
+      std::cout << "  [WAITER THREAD TID: " << waiter_tid << "] Started" << std::endl;
+
+      waiter_ready.store(true, std::memory_order_release);
+
+      struct rusage usage_start, usage_end;
+      getrusage(RUSAGE_THREAD, &usage_start);
+
+      for (int i = 0; i < num_wait_iterations; ++i) {
+        std::cout << "  [WAITER] Wait iteration " << (i+1) << "/" << num_wait_iterations << std::endl;
+
+        auto start = std::chrono::steady_clock::now();
+        hsa_signal_value_t observed = hsa_signal_wait_relaxed(
+            signal, HSA_SIGNAL_CONDITION_EQ, target_value,
+            200000000, HSA_WAIT_STATE_BLOCKED);  // 200ms timeout
+        auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - start).count();
+
+        std::cout << "    Returned after " << elapsed_ms << "ms (value=" << observed << ")" << std::endl;
+      }
+
+      getrusage(RUSAGE_THREAD, &usage_end);
+      long voluntary = usage_end.ru_nvcsw - usage_start.ru_nvcsw;
+      long involuntary = usage_end.ru_nivcsw - usage_start.ru_nivcsw;
+      total_ctx_switches_test2 = voluntary + involuntary;
+
+      std::cout << "  [WAITER THREAD TID: " << waiter_tid << "] Exiting" << std::endl;
+    });
+
+    // Wait for waiter to be ready
+    while (!waiter_ready.load(std::memory_order_acquire)) {
+      std::this_thread::yield();
+    }
+
+    waiter_thread.join();
+
+    // Stop store thread
+    stop_stores.store(true, std::memory_order_release);
+    store_thread.join();
+
+    test2_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - test2_start).count();
+
+    std::cout << "\n  TEST 2 RESULTS:" << std::endl;
+    std::cout << "    Total context switches: " << total_ctx_switches_test2 << std::endl;
+    std::cout << "    Avg context switches per wait: "
+              << std::fixed << std::setprecision(1)
+              << (double)total_ctx_switches_test2 / num_wait_iterations << std::endl;
+    std::cout << "    Total time: " << test2_duration_ms << "ms" << std::endl;
+
+    hsa_signal_destroy(signal);
+
+    // Verify high context switches with simulated behavior
+    EXPECT_GT(total_ctx_switches_test2, 50)
+        << "Simulated behavior should have many context switches (> 50)";
+  }
+
+  // Calculate and print efficiency comparison
+  double efficiency_ratio = (total_ctx_switches_test1 > 0)
+      ? (double)total_ctx_switches_test2 / (double)total_ctx_switches_test1
+      : 0.0;
+
+  std::cout << "\n  ===== EFFICIENCY COMPARISON =====" << std::endl;
+  std::cout << "  Test 1 (Conditional SetEvent):   " << total_ctx_switches_test1
+            << " context switches" << std::endl;
+  std::cout << "  Test 2 (Unconditional Wake-ups): " << total_ctx_switches_test2
+            << " context switches" << std::endl;
+  std::cout << "  Efficiency improvement: " << std::fixed << std::setprecision(1)
+            << efficiency_ratio << "x fewer context switches with fix" << std::endl;
+  std::cout << "  ==================================" << std::endl;
 
   if (verbosity() > 0) {
     std::cout << "subtest Passed" << std::endl;
