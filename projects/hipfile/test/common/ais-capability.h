@@ -11,7 +11,10 @@ namespace hipFile::test {
 // Reimplements logic from hipfile/tools/ais-check/ais-check.
 class AisCapability {
 public:
-    AisCapability();
+    AisCapability() = default;
+
+    // Run the capability checks and populate the fields below before calling fastpathAvailable().
+    void populate();
 
     bool fastpathAvailable() const
     {

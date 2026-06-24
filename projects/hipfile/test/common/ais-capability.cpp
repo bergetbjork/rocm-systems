@@ -89,7 +89,8 @@ AisCapability::detectAmdgpu()
 }
 
 // Reimplements logic from hipfile/tools/ais-check/ais-check.
-AisCapability::AisCapability()
+void
+AisCapability::populate()
 {
     detectKernelAis();
     detectHipRuntime();
