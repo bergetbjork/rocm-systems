@@ -43,7 +43,7 @@ add_executable(
     vector_add_test.cpp
     gfx1250_sim_test.cpp
     simdojo_sim_test.cpp
-    simulated_driver_test.cpp
+    simulated_kfd_test.cpp
     decode_smoke_test.cpp
     smem_sbase_operand_test.cpp
     shared_infra_test.cpp
@@ -384,7 +384,12 @@ if(HSA_RUNTIME64)
             hsa_hooks_test
             PRIVATE HAS_HOST_AMDGPU=1 KERNEL_DIR="${KERNEL_OUTPUT_DIR}"
         )
-        add_dependencies(hsa_hooks_test device_kernels rocjitsu_hooks)
+        add_dependencies(
+            hsa_hooks_test
+            device_kernels
+            rocjitsu_bin
+            rocjitsu_hooks
+        )
         rj_configure_target(hsa_hooks_test TEST)
 
         if(HAS_RDNA4_GPU)
@@ -399,16 +404,15 @@ if(HSA_RUNTIME64)
             add_test(
                 NAME "HsaHooksTest.TranslateGfx950Mfma16x16ThroughToolsLib"
                 COMMAND
-                    hsa_hooks_test
+                    $<TARGET_FILE:rocjitsu_bin> --config
+                    ${CMAKE_SOURCE_DIR}/configs/guest_gfx950_on_gfx1201.json --
+                    $<TARGET_FILE:hsa_hooks_test>
                     --gtest_filter=HsaHooksTest.TranslateGfx950Mfma16x16ThroughToolsLib
                 WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
             )
             set_tests_properties(
                 "HsaHooksTest.TranslateGfx950Mfma16x16ThroughToolsLib"
-                PROPERTIES
-                    TIMEOUT 60
-                    ENVIRONMENT
-                        "HSA_TOOLS_LIB=$<TARGET_FILE:rocjitsu_hooks>;RJ_DBT_TARGET_ISA=gfx1201;RJ_DBT_LOG=1"
+                PROPERTIES TIMEOUT 60
             )
         endif()
 

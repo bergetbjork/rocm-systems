@@ -3,8 +3,10 @@
 
 rj_add_object_library(rocjitsu_kmd
     events.cpp
+    guest_kfd.cpp
+    linux_kfd.cpp
     remote_driver.cpp
-    simulated_driver.cpp
+    simulated_kfd.cpp
     sysfs.cpp
     transport.cpp
 )
@@ -44,6 +46,7 @@ target_link_libraries(
         rocjitsu_plugin_race_detector
         rocjitsu_vm_risc_v
         rocjitsu_config
+        rocjitsu_dbt_config
         util
         flatbuffers
         Threads::Threads
