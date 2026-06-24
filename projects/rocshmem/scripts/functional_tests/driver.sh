@@ -152,7 +152,6 @@ declare -A TEST_NUMBERS=(
   ["tile_allgather_wave"]="135"
   ["tile_allgather_wg"]="136"
   ["broadcast_wave"]="137"
->>>>>>> dfbdd1c030 (add functional test, fix copilot suggestions)
 )
 
 # Detect which runtime to use
