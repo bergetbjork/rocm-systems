@@ -1437,7 +1437,6 @@ static rsmi_status_t get_frequencies(amd::smi::DevInfoTypes type, rsmi_clk_type_
   // the frequency table.
   if (f->current >= f->num_supported) {
     f->current = static_cast<uint32_t>(-1);
-    return RSMI_STATUS_UNEXPECTED_DATA;
   }
 
   return RSMI_STATUS_SUCCESS;
