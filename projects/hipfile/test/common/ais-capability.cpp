@@ -20,88 +20,84 @@ namespace {
     // initialized AIS on that node, implying the kernel supports P2PDMA.
     constexpr uint64_t KFD_AIS_CAPABILITY_BIT = 0x40;
 
-    bool kernelSupportsAis()
-    {
-        const std::string topology_nodes = "/sys/class/kfd/kfd/topology/nodes";
+}
 
-        bool any_gpu = false;
+void
+AisCapability::detectKernelAis()
+{
+    const std::string topology_nodes = "/sys/class/kfd/kfd/topology/nodes";
 
-        for (int id = 0;; ++id) {
-            const std::string props_path = topology_nodes + "/" + std::to_string(id) + "/properties";
-            std::ifstream     in{props_path};
-            if (!in.is_open()) {
-                break;
+    bool any_gpu = false;
+
+    for (int id = 0;; ++id) {
+        const std::string props_path = topology_nodes + "/" + std::to_string(id) + "/properties";
+        std::ifstream     in{props_path};
+        if (!in.is_open()) {
+            break;
+        }
+
+        uint64_t    capability = 0;
+        uint32_t    simd_count = 0;
+        std::string key;
+        uint64_t    value;
+        while (in >> key >> value) {
+            if (key == "capability") {
+                capability = value;
             }
-
-            uint64_t    capability = 0;
-            uint32_t    simd_count = 0;
-            std::string key;
-            uint64_t    value;
-            while (in >> key >> value) {
-                if (key == "capability") {
-                    capability = value;
-                }
-                else if (key == "simd_count") {
-                    simd_count = static_cast<uint32_t>(value);
-                }
-            }
-
-            if (simd_count == 0) {
-                continue; // Not a GPU, disregard
-            }
-            any_gpu = true;
-            if ((capability & KFD_AIS_CAPABILITY_BIT) == 0) {
-                return false;
+            else if (key == "simd_count") {
+                simd_count = static_cast<uint32_t>(value);
             }
         }
 
-        return any_gpu;
-    }
-
-    bool hipRuntimeSupportsAis()
-    {
-        return hipFile::getHipAmdFileReadPtr() != nullptr && hipFile::getHipAmdFileWritePtr() != nullptr;
-    }
-
-    bool amdgpuSupportsAis()
-    {
-        std::ifstream kallsyms{"/proc/kallsyms"};
-        if (!kallsyms.is_open()) {
-            std::cerr << "Unable to open /proc/kallsyms\n";
-            return false;
+        if (simd_count == 0) {
+            continue; // Not a GPU, disregard
         }
-
-        std::string line;
-        while (std::getline(kallsyms, line)) {
-            if (line.find("kfd_ais_rw_file") != std::string::npos) {
-                return true;
-            }
+        any_gpu = true;
+        if ((capability & KFD_AIS_CAPABILITY_BIT) == 0) {
+            kernel_ais = false;
+            return;
         }
-        return false;
     }
 
+    kernel_ais = any_gpu;
+}
+
+void
+AisCapability::detectHipRuntime()
+{
+    hip_runtime = hipFile::getHipAmdFileReadPtr() != nullptr && hipFile::getHipAmdFileWritePtr() != nullptr;
+}
+
+void
+AisCapability::detectAmdgpu()
+{
+    std::ifstream kallsyms{"/proc/kallsyms"};
+    if (!kallsyms.is_open()) {
+        std::cerr << "Unable to open /proc/kallsyms\n";
+        amdgpu = false;
+        return;
+    }
+
+    std::string line;
+    while (std::getline(kallsyms, line)) {
+        if (line.find("kfd_ais_rw_file") != std::string::npos) {
+            amdgpu = true;
+            return;
+        }
+    }
+    amdgpu = false;
 }
 
 // Reimplements logic from hipfile/tools/ais-check/ais-check.
-AisCapability
-AisCapability::detectAisCapability()
+AisCapability::AisCapability()
 {
-    AisCapability cap;
-    cap.kernel_ais  = kernelSupportsAis();
-    cap.hip_runtime = hipRuntimeSupportsAis();
-    cap.amdgpu      = amdgpuSupportsAis();
+    detectKernelAis();
+    detectHipRuntime();
+    detectAmdgpu();
 
-    std::cerr << "AIS kernel AIS-init support: " << (cap.kernel_ais ? "yes" : "no") << "\n";
-    std::cerr << "AIS HIP runtime support:     " << (cap.hip_runtime ? "yes" : "no") << "\n";
-    std::cerr << "AIS amdgpu support:          " << (cap.amdgpu ? "yes" : "no") << "\n";
-
-    return cap;
-}
-
-bool
-AisCapability::fastpathAvailable()
-{
-    return detectAisCapability().fastpath_available();
+    std::cerr << "AIS kernel AIS-init support: " << (kernel_ais ? "yes" : "no") << "\n";
+    std::cerr << "AIS HIP runtime support:     " << (hip_runtime ? "yes" : "no") << "\n";
+    std::cerr << "AIS amdgpu support:          " << (amdgpu ? "yes" : "no") << "\n";
 }
 
 }

@@ -64,7 +64,7 @@ struct HipFileIo : public testing::TestWithParam<IoTestParam> {
         // Enable the desired backend
         switch (GetParam().backend) {
             case IoTestBackend::Fastpath:
-                if (!hipFile::test::AisCapability::fastpathAvailable())
+                if (!hipFile::test::AisCapability{}.fastpathAvailable())
                     GTEST_SKIP() << "SKIP: fastpath not available in this environment";
                 Context<Configuration>::get()->fastpath(true);
                 break;
@@ -148,7 +148,7 @@ struct HipFileIoHipInit : public testing::Test {
         ASSERT_EQ(HIPFILE_SUCCESS,
                   hipFileBufRegister(registered_device_buffer, registered_device_buffer_size, 0));
 
-        if (!hipFile::test::AisCapability::fastpathAvailable())
+        if (!hipFile::test::AisCapability{}.fastpathAvailable())
             GTEST_SKIP() << "SKIP: fastpath not available in this environment";
     }
 

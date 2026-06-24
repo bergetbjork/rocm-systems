@@ -9,19 +9,23 @@ namespace hipFile::test {
 
 // Check AIS capability for tests that attempt to force fast path.
 // Reimplements logic from hipfile/tools/ais-check/ais-check.
-struct AisCapability {
-    bool kernel_ais  = false; ///< AIS-init bit set on all GPU nodes in KFD topology
-    bool hip_runtime = false; ///< hipAmdFileRead + hipAmdFileWrite resolvable
-    bool amdgpu      = false; ///< kfd_ais_rw_file present in /proc/kallsyms
+class AisCapability {
+public:
+    AisCapability();
 
-    bool fastpath_available() const
+    bool fastpathAvailable() const
     {
         return kernel_ais && hip_runtime && amdgpu;
     }
 
-    static AisCapability detectAisCapability();
+private:
+    void detectKernelAis();
+    void detectHipRuntime();
+    void detectAmdgpu();
 
-    static bool fastpathAvailable();
+    bool kernel_ais  = false; ///< AIS-init bit set on all GPU nodes in KFD topology
+    bool hip_runtime = false; ///< hipAmdFileRead + hipAmdFileWrite resolvable
+    bool amdgpu      = false; ///< kfd_ais_rw_file present in /proc/kallsyms
 };
 
 }
