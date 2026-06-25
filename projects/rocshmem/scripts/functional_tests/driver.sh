@@ -151,6 +151,9 @@ declare -A TEST_NUMBERS=(
   ["tile_allgather"]="134"
   ["tile_allgather_wave"]="135"
   ["tile_allgather_wg"]="136"
+  ["tile_reduce"]="137"
+  ["tile_reduce_wave"]="138"
+  ["tile_reduce_wg"]="139"
 )
 
 # Detect which runtime to use
@@ -896,6 +899,12 @@ TestTiles() {
   ExecTest  "tile_allgather_wave"       4       1            $WAVE_SIZE
   ExecTest  "tile_allgather_wg"         2       4            $WAVE_SIZE
   ExecTest  "tile_allgather_wg"         4       4            $WAVE_SIZE
+  ExecTest  "tile_reduce"               2       1            1
+  ExecTest  "tile_reduce"               4       1            1
+  ExecTest  "tile_reduce_wave"          2       1            $WAVE_SIZE
+  ExecTest  "tile_reduce_wave"          4       1            $WAVE_SIZE
+  ExecTest  "tile_reduce_wg"            2       4            $WAVE_SIZE
+  ExecTest  "tile_reduce_wg"            4       4            $WAVE_SIZE
 }
 
 TestHeatMapRMA() {
