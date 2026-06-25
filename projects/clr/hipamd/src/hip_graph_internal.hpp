@@ -1204,6 +1204,19 @@ class GraphExec : public amd::ReferenceCountedObject, public Graph {
   SyncPlan sync_plan_;
 
   void BuildSyncPlan();
+
+  // ---- Same-queue any-order overlap (Approach B: oversubscription) --------
+  // Multi-queue scheduling is preserved. When more parallel same-level segments
+  // exist than streams in a device's pool, round-robin assignment lands several
+  // segments on the same queue. ApplySameQueueOverlapPolicy() clears the AQL
+  // barrier bit on the head of those colliding segments so capable hardware
+  // overlaps them on that queue instead of serializing. Set once in Init();
+  // guards every mutation so the pass is a no-op otherwise.
+  bool anyorder_enabled_ = false;
+  void ApplySameQueueOverlapPolicy();
+  // True for ISAs whose CP honors out-of-order same-queue dispatch when the
+  // barrier bit is clear (gfx1250 / gfx12.5+).
+  static bool DeviceHonorsSameQueueAnyOrder(int dev_id);
 };
 
 class ChildGraphNode : public GraphNode, public GraphExec {

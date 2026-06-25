@@ -247,6 +247,10 @@ release(uint, DEBUG_HIP_GRAPH_BATCH_SIZE, 256,                                \
         "Number of graph nodes to batch at a time")                           \
 release(uint, DEBUG_HIP_GRAPH_SEGMENT_SCHEDULING, 1,                          \
         "0 = Disable, 1 = Enable, 2 = Force")                                 \
+release(bool, DEBUG_HIP_GRAPH_ANYORDER_OVERLAP, false,                        \
+        "Keep multi-queue segment scheduling but clear the AQL barrier bit "  \
+        "when parallel segments oversubscribe a queue, so capable HW "        \
+        "(gfx1250 / gfx12.5+) overlaps the colliding kernels on that queue")  \
 release(uint, DEBUG_HIP_BLOCK_SYNC, 50,                                       \
         "Blocks synchronization on CPU until the callback processing is done")\
 release(uint, DEBUG_CLR_MAX_BATCH_SIZE, 1000,                                 \
