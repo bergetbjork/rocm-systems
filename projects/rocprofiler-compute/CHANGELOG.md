@@ -7,7 +7,7 @@ Full documentation for ROCm Compute Profiler is available at [https://rocm.docs.
 
 ### Changed
 
-* Improved vL1D Cache Hit and vL1D Cache Hit Rate metric equations to more accurately reflect vL1 cache behavior on MI300/MI350.
+* Improved vL1D Cache Hit and vL1D Cache Hit Rate metric equations to more accurately reflect vL1 cache behavior on MI3xx (gfx942), and MI350 (gfx950).
 
 ## ROCm Compute Profiler 3.7.0 for ROCm 7.14.0
 
