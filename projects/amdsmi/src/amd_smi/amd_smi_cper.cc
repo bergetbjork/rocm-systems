@@ -75,7 +75,7 @@ static std::vector<const amdsmi_cper_hdr_t*> amdsmi_get_gpu_cper_headers(const c
 struct CperFileCtx {
   amdsmi_status_t status = AMDSMI_STATUS_FILE_ERROR;
   std::unique_ptr<char[]> buffer;
-  long file_size = 0;
+  size_t file_size = 0;
 };
 
 static auto amdsmi_read_cper_file(const std::string& filepath) -> CperFileCtx {
@@ -100,7 +100,7 @@ static auto amdsmi_read_cper_file(const std::string& filepath) -> CperFileCtx {
     return ctx;
   }
 
-  ctx.file_size = file_stats.st_size;
+  ctx.file_size = static_cast<size_t>(file_stats.st_size);
   ctx.buffer = std::make_unique<char[]>(static_cast<size_t>(ctx.file_size));
 
   // Read with POSIX open/read/close rather than std::ifstream. The hazard is
@@ -121,7 +121,7 @@ static auto amdsmi_read_cper_file(const std::string& filepath) -> CperFileCtx {
     LOG_ERROR(ss);
     return ctx;
   }
-  auto bytes_read = read(fd, ctx.buffer.get(), ctx.file_size);
+  ssize_t bytes_read = read(fd, ctx.buffer.get(), ctx.file_size);
   if (bytes_read <= 0) {
     ss << __PRETTY_FUNCTION__ << "\n:" << __LINE__
        << "[CPER] failed to read complete file, read only  " << bytes_read << " of "
@@ -133,7 +133,7 @@ static auto amdsmi_read_cper_file(const std::string& filepath) -> CperFileCtx {
   close(fd);
 
   ctx.status = AMDSMI_STATUS_SUCCESS;
-  ctx.file_size = bytes_read;
+  ctx.file_size = static_cast<size_t>(bytes_read);
   return ctx;
 }
 
