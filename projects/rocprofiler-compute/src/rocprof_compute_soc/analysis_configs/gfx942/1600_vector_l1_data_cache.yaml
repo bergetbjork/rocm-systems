@@ -306,12 +306,16 @@ Panel Config:
       value does not consider partial requests, so for instance, if only a single
       value is requested in a cache line, the data movement will still be counted
       as a full cache line.
-    Cache Hit Rate: The ratio of the number of vL1D cache line requests that hit in
-      vL1D cache over the total number of cache line requests to the vL1D Cache RAM.
+    Cache Hit Rate: >-
+      The ratio of the number of vL1D cache line read and write requests that hit
+      in vL1D cache over the total number of vL1D read and write requests.
+      Note: Atomic requests are excluded from this calculation.
     Cache Accesses: The total number of cache line lookups in the vL1D.
-    Cache Hits: The number of cache accesses minus the number of outgoing requests
-      to the L2 cache, that is, the number of cache line requests serviced by the
-      vL1D Cache RAM per normalization unit.
+    Cache Hits: >-
+      The number of read and write cache accesses minus the number of outgoing read
+      and write requests to the L2 cache, that is, the number of read and write cache
+      line requests serviced by the vL1D Cache RAM per normalization unit.
+      Note: Atomic requests are excluded from this calculation.
     Invalidations: The number of times the vL1D was issued a write-back invalidate
       command during the kernel's execution per normalization unit. This may be triggered
       by, for instance, the buffer_wbinvl1 instruction.
