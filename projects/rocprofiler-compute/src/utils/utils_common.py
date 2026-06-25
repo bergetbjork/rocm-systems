@@ -36,6 +36,7 @@ from vendored import yaml
 # Global constants
 METRIC_ID_RE = re.compile(pattern=r"^\d{1,2}(?:\.\d{1,2}){0,2}$")
 PC_SAMPLING_BLOCK_IDS = ("21", "pc_sampling")
+_PROFILE_OUTPUT_FORMAT = "rocpd"
 
 
 def canonical_config_arch(gpu_arch: Optional[str]) -> Optional[str]:
