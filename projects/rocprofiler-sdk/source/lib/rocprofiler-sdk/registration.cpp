@@ -1291,8 +1291,10 @@ rocprofiler_set_api_table(const char* name,
 
             // if non_queue_interposition_contexts is empty, default to inline intercept.
             // if non_queue_interposition_contexts is not empty, default to non-inline intercept.
-            auto enable_queue_interposition = rocprofiler::common::get_env(
-                "ROCPROFILER_QUEUE_INTERPOSITION", non_queue_interposition_contexts.empty());
+            // [DIAGNOSTIC] force inline queue-interposition OFF by default to test whether the
+            // inline QI path is responsible for the no_bubbles/transpose-sampling dispatch stall.
+            auto enable_queue_interposition =
+                rocprofiler::common::get_env("ROCPROFILER_QUEUE_INTERPOSITION", false);
 
             // if ROCPROFILER_QUEUE_INTERPOSITION is explicitly set to true, but there are contexts
             // that require non-inline intercept, print a warning and fall back to non-inline
