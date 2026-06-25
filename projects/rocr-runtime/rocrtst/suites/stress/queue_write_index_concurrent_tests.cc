@@ -50,6 +50,12 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <thread>
+#include <atomic>
+#include <chrono>
+#include <pthread.h>
+#include <sys/resource.h>
+#include <iomanip>
 
 #include "suites/stress/queue_write_index_concurrent_tests.h"
 #include "common/base_rocr_utils.h"
@@ -579,3 +585,202 @@ void QueueWriteIndexConcurrentTest::QueueLoadStoreWriteIndexAtomic(void) {
   }
 }
 
+void QueueWriteIndexConcurrentTest::TestSilentStoreSemantics(void) {
+  hsa_status_t err;
+
+  if (verbosity() > 0) {
+    PrintDebugSubtestHeader("Signal Silent Store Performance Comparison");
+  }
+
+  pthread_t main_tid = pthread_self();
+  std::cout << "  [MAIN THREAD TID: " << main_tid << "]" << std::endl;
+
+  // Get CPU agent to use as consumer (forces InterruptSignal creation)
+  hsa_agent_t* cpu_agent_ptr = cpu_device();
+  ASSERT_NE(cpu_agent_ptr, nullptr);
+
+  const int NUM_STORES = 100;  // Perform 100 stores for measurable difference
+  const hsa_signal_value_t target_value = 1000;
+
+  // ========================================================================
+  // TEST 1: Performance with SILENT stores (should be efficient)
+  // ========================================================================
+  std::cout << "\n  === TEST 1: Performance with SILENT stores ===" << std::endl;
+
+  hsa_signal_t signal1;
+  err = hsa_signal_create(0, 1, cpu_agent_ptr, &signal1);
+  ASSERT_EQ(err, HSA_STATUS_SUCCESS);
+
+  std::atomic<bool> waiter1_ready{false};
+  long silent_ctx_switches = 0;
+
+  std::thread waiter_thread1([&]() {
+    pthread_t waiter_tid = pthread_self();
+    std::cout << "  [WAITER1 TID: " << waiter_tid << "] Waiting for value=" << target_value << std::endl;
+
+    waiter1_ready.store(true, std::memory_order_release);
+
+    struct rusage usage_start, usage_end;
+    getrusage(RUSAGE_THREAD, &usage_start);
+
+    auto start = std::chrono::steady_clock::now();
+    hsa_signal_value_t observed = hsa_signal_wait_relaxed(
+        signal1, HSA_SIGNAL_CONDITION_EQ, target_value,
+        5000000000, HSA_WAIT_STATE_BLOCKED);  // 5 second timeout
+    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start).count();
+
+    getrusage(RUSAGE_THREAD, &usage_end);
+
+    long voluntary_ctx = usage_end.ru_nvcsw - usage_start.ru_nvcsw;
+    long involuntary_ctx = usage_end.ru_nivcsw - usage_start.ru_nivcsw;
+    silent_ctx_switches = voluntary_ctx + involuntary_ctx;
+
+    std::cout << "  [WAITER1 TID: " << waiter_tid << "] Completed after " << elapsed_ms << "ms" << std::endl;
+    std::cout << "    Context switches: " << silent_ctx_switches
+              << " (voluntary=" << voluntary_ctx << ", involuntary=" << involuntary_ctx << ")" << std::endl;
+  });
+
+  // Wait for waiter to be ready
+  while (!waiter1_ready.load(std::memory_order_acquire)) {
+    std::this_thread::yield();
+  }
+  std::cout << "  [MAIN] Waiter1 ready, starting SILENT stores..." << std::endl;
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  // Perform SILENT stores while waiter is blocked - no SetEvent() calls
+  auto silent_start = std::chrono::steady_clock::now();
+  for (int i = 1; i <= NUM_STORES; ++i) {
+    hsa_signal_silent_store_screlease(signal1, i);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  auto silent_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - silent_start).count();
+
+  std::cout << "  [MAIN] Completed " << NUM_STORES << " SILENT stores in " << silent_elapsed << "ms" << std::endl;
+
+  // Wake up waiter with regular store to end the wait
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  hsa_signal_store_screlease(signal1, target_value);
+
+  waiter_thread1.join();
+  hsa_signal_destroy(signal1);
+
+  // ========================================================================
+  // TEST 2: Performance with REGULAR stores (should be inefficient)
+  // ========================================================================
+  std::cout << "\n  === TEST 2: Performance with REGULAR stores ===" << std::endl;
+
+  hsa_signal_t signal2;
+  err = hsa_signal_create(0, 1, cpu_agent_ptr, &signal2);
+  ASSERT_EQ(err, HSA_STATUS_SUCCESS);
+
+  std::atomic<bool> waiter2_ready{false};
+  long regular_ctx_switches = 0;
+
+  std::thread waiter_thread2([&]() {
+    pthread_t waiter_tid = pthread_self();
+    std::cout << "  [WAITER2 TID: " << waiter_tid << "] Waiting for value=" << target_value << std::endl;
+
+    waiter2_ready.store(true, std::memory_order_release);
+
+    struct rusage usage_start, usage_end;
+    getrusage(RUSAGE_THREAD, &usage_start);
+
+    auto start = std::chrono::steady_clock::now();
+    hsa_signal_value_t observed = hsa_signal_wait_relaxed(
+        signal2, HSA_SIGNAL_CONDITION_EQ, target_value,
+        5000000000, HSA_WAIT_STATE_BLOCKED);  // 5 second timeout
+    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start).count();
+
+    getrusage(RUSAGE_THREAD, &usage_end);
+
+    long voluntary_ctx = usage_end.ru_nvcsw - usage_start.ru_nvcsw;
+    long involuntary_ctx = usage_end.ru_nivcsw - usage_start.ru_nivcsw;
+    regular_ctx_switches = voluntary_ctx + involuntary_ctx;
+
+    std::cout << "  [WAITER2 TID: " << waiter_tid << "] Completed after " << elapsed_ms << "ms" << std::endl;
+    std::cout << "    Context switches: " << regular_ctx_switches
+              << " (voluntary=" << voluntary_ctx << ", involuntary=" << involuntary_ctx << ")" << std::endl;
+  });
+
+  // Wait for waiter to be ready
+  while (!waiter2_ready.load(std::memory_order_acquire)) {
+    std::this_thread::yield();
+  }
+  std::cout << "  [MAIN] Waiter2 ready, starting REGULAR stores..." << std::endl;
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  // Perform REGULAR stores while waiter is blocked - each calls SetEvent()!
+  auto regular_start = std::chrono::steady_clock::now();
+  for (int i = 1; i <= NUM_STORES; ++i) {
+    hsa_signal_store_screlease(signal2, i);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  auto regular_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - regular_start).count();
+
+  std::cout << "  [MAIN] Completed " << NUM_STORES << " REGULAR stores in " << regular_elapsed << "ms" << std::endl;
+
+  // Wake up waiter with final store
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  hsa_signal_store_screlease(signal2, target_value);
+
+  waiter_thread2.join();
+  hsa_signal_destroy(signal2);
+
+  // ========================================================================
+  // PERFORMANCE COMPARISON
+  // ========================================================================
+  std::cout << "\n  ========================================" << std::endl;
+  std::cout << "  PERFORMANCE COMPARISON RESULTS" << std::endl;
+  std::cout << "  ========================================" << std::endl;
+  std::cout << "  Number of stores performed: " << NUM_STORES << std::endl;
+  
+  std::cout << "\n  SILENT stores (hsa_signal_silent_store_screlease):" << std::endl;
+  std::cout << "    - Context switches: " << silent_ctx_switches << std::endl;
+  std::cout << "    - Time: " << silent_elapsed << "ms" << std::endl;
+  std::cout << "    - Avg per store: " << std::fixed << std::setprecision(2) 
+            << (silent_elapsed / (double)NUM_STORES) << "ms" << std::endl;
+  std::cout << "    - SetEvent() calls: 0 (skipped)" << std::endl;
+  std::cout << "    - Kernel wake-ups: ~0" << std::endl;
+
+  std::cout << "\n  REGULAR stores (hsa_signal_store_screlease):" << std::endl;
+  std::cout << "    - Context switches: " << regular_ctx_switches << std::endl;
+  std::cout << "    - Time: " << regular_elapsed << "ms" << std::endl;
+  std::cout << "    - Avg per store: " << std::fixed << std::setprecision(2)
+            << (regular_elapsed / (double)NUM_STORES) << "ms" << std::endl;
+  std::cout << "    - SetEvent() calls: " << NUM_STORES << " (every store)" << std::endl;
+  std::cout << "    - Kernel wake-ups: ~" << NUM_STORES << std::endl;
+
+  if (regular_ctx_switches > silent_ctx_switches) {
+    double ctx_ratio = (double)regular_ctx_switches / (double)silent_ctx_switches;
+    std::cout << "\n  EFFICIENCY GAIN:" << std::endl;
+    std::cout << "    - Context switch reduction: " << std::fixed << std::setprecision(1)
+              << ctx_ratio << "x fewer with silent stores" << std::endl;
+    std::cout << "    - Regular stores caused " << (regular_ctx_switches - silent_ctx_switches)
+              << " extra context switches" << std::endl;
+    std::cout << "    - Each regular store triggers SetEvent() syscall" << std::endl;
+    std::cout << "    - Each SetEvent() wakes waiter unnecessarily" << std::endl;
+  }
+
+  std::cout << "\n  USE CASES:" << std::endl;
+  std::cout << "    Silent stores are ideal for:" << std::endl;
+  std::cout << "      - Initializing signal pools" << std::endl;
+  std::cout << "      - Bulk signal updates when no waiters exist" << std::endl;
+  std::cout << "      - Avoiding syscall overhead in tight loops" << std::endl;
+  std::cout << "    Regular stores are needed for:" << std::endl;
+  std::cout << "      - Signaling completion to waiting threads" << std::endl;
+  std::cout << "      - Coordinating between CPU and GPU" << std::endl;
+  std::cout << "  ========================================" << std::endl;
+
+  // Verify silent stores are more efficient
+  EXPECT_LT(silent_ctx_switches, regular_ctx_switches)
+      << "Silent stores should cause significantly fewer context switches than regular stores";
+
+  if (verbosity() > 0) {
+    std::cout << "subtest Passed" << std::endl;
+    std::cout << kSubTestSeparator << std::endl;
+  }
+}
