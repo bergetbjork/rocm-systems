@@ -109,7 +109,7 @@
       "files": {
         "0000_top_stats.yaml": "2819d96f5b1c3704f2ac50868a246a7f",
         "0100_system_info.yaml": "cefae2b10db8cf4b0d3a971cff5e82c8",
-        "0200_system_speed_of_light.yaml": "42e5f1e6ef3d5e6985f1064167f028c2",
+        "0200_system_speed_of_light.yaml": "55b123495f911ac22f7c77197147ada7",
         "0300_memory_chart.yaml": "e157e315153cba5b6392360dde624039",
         "0400_roofline.yaml": "73cba2af93c9f1a5e5130df9dd3a3f1b",
         "0500_command_processor_cpc_cpf.yaml": "8d76d2a8f16aaf8f684b7ce2cef048f0",
@@ -131,7 +131,7 @@
       "files": {
         "0000_top_stats.yaml": "2819d96f5b1c3704f2ac50868a246a7f",
         "0100_system_info.yaml": "cefae2b10db8cf4b0d3a971cff5e82c8",
-        "0200_system_speed_of_light.yaml": "683e3116257df32dac95bd33867b6f29",
+        "0200_system_speed_of_light.yaml": "77644f1d9387d58d69c9edbc7f4332ec",
         "0300_memory_chart.yaml": "8fce0c437d0bb5e549d66207709c528e",
         "0400_roofline.yaml": "fa14331c5e57f000c63f2da2543b4ce7",
         "0500_command_processor_cpc_cpf.yaml": "9692ade2811b3693357296edbdf31dce",
