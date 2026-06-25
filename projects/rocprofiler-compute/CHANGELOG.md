@@ -22,6 +22,8 @@ Full documentation for ROCm Compute Profiler is available at [https://rocm.docs.
 
 ### Changed
 
+* Split Python version requirements by mode. Profile mode now runs on Python 3.8+ (standard library only). Analyze mode requires Python 3.9+ and exits with a clear message on older interpreters instead of failing with an import error.
+
 * Renamed the `Pct of Peak` / `PoP` analysis column to `Percent of Peak` in analysis output.
 
 * Moved `--gui` and `--tui` analyze options to experimental status. These features now require the `--experimental` flag to be enabled (e.g., `rocprof-compute analyze --experimental --gui`).
