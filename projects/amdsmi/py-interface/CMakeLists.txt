@@ -73,6 +73,7 @@ else()
             ${PY_PACKAGE_DIR}/amdsmi_wrapper.py
         DEPENDS
             ${AMD_SMI}
+            $<$<BOOL:${BUILD_PYTHON_WHEEL}>:${AMD_SMI}_python>
             python_pre_reqs
             generator.py
             ${PROJECT_SOURCE_DIR}/include/amd_smi/amdsmi.h
@@ -131,6 +132,32 @@ add_custom_target(
         ${PY_PACKAGE_DIR}/LICENSE
         ${PY_PACKAGE_DIR}/${AMDSMI_PYTHON_LIB_NAME}
 )
+if(BUILD_PYTHON_WHEEL)
+    add_dependencies(python_package ${AMD_SMI}_python)
+endif()
+
+# Build a wheel into the binary dir (no deps, local artifacts only).
+# Gated on BUILD_PYTHON_WHEEL so the default ROCm CI build (no extra flags) does
+# not produce a .whl artifact -- only the system .deb/.rpm layout is built.
+if(BUILD_PYTHON_WHEEL)
+    add_custom_target(
+        python_wheel
+        ALL
+        DEPENDS python_package
+        # The wheel bundles libamd_smi_python.so, so it must never fall back
+        # to a system libamd_smi.so. Flip the loader flag in the staged copy
+        # (only the wheel ships this file) so a wheel that is missing its
+        # bundled .so fails loudly instead of loading an unrelated system lib.
+        COMMAND
+            ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/disable_system_fallback.py
+            ${CMAKE_CURRENT_BINARY_DIR}/${PY_PACKAGE_DIR}/amdsmi_wrapper.py
+        COMMAND
+            ${CMAKE_COMMAND} -E env PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/${PY_BUILD_DIR} ${Python3_EXECUTABLE} -m pip
+            wheel --no-deps -w ${CMAKE_CURRENT_BINARY_DIR}/${PY_BUILD_DIR} ${CMAKE_CURRENT_BINARY_DIR}/${PY_BUILD_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${PY_BUILD_DIR}
+        COMMENT "Building amdsmi wheel without dependencies"
+    )
+endif()
 
 # Install the python module directly into the target Python's
 # site-packages so `import amdsmi` works after `apt install` / `dnf install`
