@@ -39,8 +39,13 @@ ProcessResult run_command(const std::string &cmd) {
 }
 
 const ProcessResult &rocminfo_output() {
-  static const ProcessResult result = run_command(std::string(ROCJITSU_BIN) + " --config " +
-                                                  RJ_CONFIG_PATH + " -- " + ROCMINFO_PATH);
+  const char *rocjitsu_bin = std::getenv("ROCJITSU_BIN");
+  const char *config_path = std::getenv("ROCJITSU_CONFIG");
+  const char *rocminfo_path = std::getenv("ROCMINFO_PATH");
+  static const ProcessResult result =
+      run_command(std::string(rocjitsu_bin ? rocjitsu_bin : ROCJITSU_BIN) + " --config " +
+                  (config_path ? config_path : RJ_CONFIG_PATH) + " -- " +
+                  (rocminfo_path ? rocminfo_path : ROCMINFO_PATH));
   return result;
 }
 
