@@ -1,0 +1,8 @@
+---
+cluster:
+  Unit_cluster_coop_group_class:
+    <<: *level_2
+  Unit_hipClusterLaunch_CompilerDirective_Basic:
+    <<: *level_2
+  Unit_hipClusterLaunch_LaunchApi_Basic:
+    <<: *level_2

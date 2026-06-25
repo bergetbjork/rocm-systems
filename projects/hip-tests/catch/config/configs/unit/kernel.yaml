@@ -99,3 +99,7 @@ kernel:
   Unit_hipExtDynDataPrefetch_TemporalHints:
     <<: *level_2
     tags: [launch]
+  Unit_KernelStackSize:
+    <<: *level_2
+  Unit_Validate_User_Sgpr_Count:
+    <<: *level_2
