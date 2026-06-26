@@ -119,6 +119,17 @@ else()
 endif()
 
 option(BUILD_EXAMPLES "Build examples" OFF)
+option(
+    BUILD_PYTHON_WHEEL
+    "Build the standalone Python wheel and the isolated libamd_smi_python.so it bundles. OFF means only the system-package layout is built (no .whl artifact)."
+    OFF
+)
+if(BUILD_PYTHON_WHEEL AND NOT BUILD_SHARED_LIBS)
+    message(
+        FATAL_ERROR
+        "BUILD_PYTHON_WHEEL=ON requires BUILD_SHARED_LIBS=ON: the wheel ships a .so (libamd_smi_python.so) and the py-interface subdirectory only enters when BUILD_SHARED_LIBS=ON."
+    )
+endif()
 
 # If amdsmi is built as a static library, it should support being embedded in other programs. The setting below essentially enables the -fPIC flag.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "Enable position independent code for all targets")
