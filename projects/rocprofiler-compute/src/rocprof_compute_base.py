@@ -368,14 +368,6 @@ class RocProfCompute:
                     "supported in --tui mode. Please remove --tui or run "
                     "without the operator flags.",
                 )
-            if args.spatial_multiplexing:
-                console_error(
-                    "ml api trace",
-                    "Operator flags (--torch-operator, --triton-operator, "
-                    "--list-torch-operators, --list-triton-operators) do not yet "
-                    "support multi-node analysis via --spatial-multiplexing. "
-                    "Please remove one of these options.",
-                )
             if args.output_format != "stdout":
                 console_error(
                     "ml api trace",
