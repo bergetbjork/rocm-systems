@@ -392,6 +392,7 @@ SCallB64Sopk::SCallB64Sopk(const MachineInst *inst)
   num_src_ = 1;
   num_dst_ = 1;
   flags_ |= INDIRECT_CALL;
+  flags_ |= PC_OPERAND;
 }
 
 void SCallB64Sopk::execute_impl(amdgpu::Wavefront &wf) {
