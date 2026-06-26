@@ -33,6 +33,7 @@
 #include <fmt/ranges.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -115,9 +116,19 @@ template <typename Tp>
 pool_object<Tp>&
 pool<Tp>::acquire()
 {
+    // [POOL-INSTR] threshold for logging slow operations (microseconds)
+    constexpr int64_t _stall_us = 5000;
+    using _clk                  = std::chrono::steady_clock;
+
     auto _idx = std::optional<size_type>{};
     {
-        auto _avail_lk = std::unique_lock<std::mutex>{m_available_mtx};
+        const auto _w0       = _clk::now();
+        auto       _avail_lk = std::unique_lock<std::mutex>{m_available_mtx};
+        const auto _wait =
+            std::chrono::duration_cast<std::chrono::microseconds>(_clk::now() - _w0).count();
+        ROCP_WARNING_IF(_wait > _stall_us)
+            << "[POOL-INSTR] acquire waited " << _wait
+            << "us for m_available_mtx (avail=" << m_available.size() << ")";
         if(!m_available.empty())
         {
             _idx = m_available.front();
@@ -131,8 +142,13 @@ pool<Tp>::acquire()
 
     if(_idx.has_value())
     {
-        auto  _read_lk = std::unique_lock<std::mutex>{m_pool_mtx};
-        auto& _obj     = m_pool.at(_idx.value());
+        const auto _w0      = _clk::now();
+        auto       _read_lk = std::unique_lock<std::mutex>{m_pool_mtx};
+        const auto _wait =
+            std::chrono::duration_cast<std::chrono::microseconds>(_clk::now() - _w0).count();
+        ROCP_WARNING_IF(_wait > _stall_us)
+            << "[POOL-INSTR] acquire waited " << _wait << "us for m_pool_mtx (read path)";
+        auto& _obj = m_pool.at(_idx.value());
         ROCP_FATAL_IF(!_obj.acquire()) << fmt::format(
             "Pool object at index {} was expected to be available but was not", _idx.value());
         return _obj;
@@ -140,17 +156,29 @@ pool<Tp>::acquire()
 
     // add a new batch
     {
-        auto _write_pool_lk  = std::unique_lock<std::mutex>{m_pool_mtx};
-        auto _write_avail_lk = std::unique_lock<std::mutex>{m_available_mtx};
+        const auto _w0             = _clk::now();
+        auto       _write_pool_lk  = std::unique_lock<std::mutex>{m_pool_mtx};
+        auto       _write_avail_lk = std::unique_lock<std::mutex>{m_available_mtx};
+        const auto _wait =
+            std::chrono::duration_cast<std::chrono::microseconds>(_clk::now() - _w0).count();
         if(m_available.empty())
         {
-            ROCP_INFO << fmt::format(
-                "Pool of type {} exhausted. Creating new batch of {} objects. New pool size: {}",
-                cxx_demangle(typeid(Tp).name()),
-                m_count,
-                m_pool.size() + m_count);
+            const auto _g0 = _clk::now();
             m_new_batch++;
             m_function();
+            const auto _grow =
+                std::chrono::duration_cast<std::chrono::microseconds>(_clk::now() - _g0).count();
+            // [POOL-INSTR] growth is the prime suspect: log every grow with timing + counters
+            ROCP_WARNING << "[POOL-INSTR] GROW #" << m_new_batch.load() << " of type "
+                         << cxx_demangle(typeid(Tp).name()) << ": lock_wait=" << _wait
+                         << "us create_batch(" << m_count << ")=" << _grow
+                         << "us new_pool_size=" << m_pool.size()
+                         << " released=" << m_released.load() << " reused=" << m_reused.load();
+        }
+        else
+        {
+            ROCP_WARNING_IF(_wait > _stall_us)
+                << "[POOL-INSTR] acquire-grow path waited " << _wait << "us for pool mutexes";
         }
     }
 
@@ -163,7 +191,13 @@ pool<Tp>::release(size_type idx)
 {
     if(idx < m_pool.size())
     {
-        auto _write_lk = std::unique_lock<std::mutex>{m_available_mtx};
+        const auto _w0       = std::chrono::steady_clock::now();
+        auto       _write_lk = std::unique_lock<std::mutex>{m_available_mtx};
+        const auto _wait     = std::chrono::duration_cast<std::chrono::microseconds>(
+                               std::chrono::steady_clock::now() - _w0)
+                               .count();
+        ROCP_WARNING_IF(_wait > 5000)
+            << "[POOL-INSTR] release waited " << _wait << "us for m_available_mtx";
         ROCP_FATAL_IF(m_pool.at(idx).in_use())
             << fmt::format("Pool object at index {} was expected to be not in use", idx);
         m_available.push(idx);
