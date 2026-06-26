@@ -713,16 +713,14 @@ jobs:
             --name "${{ github.repository_owner }}-${{ github.ref_name }}-${{ matrix.cdash_suffix }}" \
             -B build
 
-      - &_step-publish-results
-        name: Publish test results
+      - &_step-upload-junit-results
+        name: Upload JUnit test results
         if: always()
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: actions/upload-artifact@v7
         with:
-          files: projects/rocprofiler-systems/build/test-results.xml
-          check_name: "Tests — ${{ matrix.name }}"
-          comment_mode: 'off'
-          check_run: false
-          job_summary: true
+          name: junit-${{ github.job }}-${{ strategy.job-index }}
+          path: projects/rocprofiler-systems/build/test-results.xml
+          if-no-files-found: ignore
 
       - &_step-ccache-stats
         name: ccache stats
@@ -1147,7 +1145,7 @@ jobs:
             --name "${{ github.repository_owner }}-${{ github.ref_name }}-${{ matrix.cdash_suffix }}" \
             -B build
 
-      - *_step-publish-results
+      - *_step-upload-junit-results
 
       - *_step-ccache-stats
 
@@ -1188,3 +1186,46 @@ jobs:
       - *_step-ctest-artifacts
 
       - *_step-data-artifacts
+
+  publish-test-results:
+    name: Publish test result summary
+    needs: [build, system-deps]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      checks: write
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Download JUnit test result artifacts
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          pattern: junit-*
+          path: junit-results
+          merge-multiple: false
+
+      - name: Check for JUnit files
+        id: junit-files
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          files=(junit-results/**/*.xml)
+          echo "count=${#files[@]}" >> "${GITHUB_OUTPUT}"
+
+      - name: Publish test result summary
+        if: steps.junit-files.outputs.count != '0'
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: junit-results/**/*.xml
+          check_name: rocprofiler-systems Tests
+          comment_mode: ${{ github.event_name == 'pull_request' && 'always' || 'off' }}
+          comment_title: rocprofiler-systems Test Summary
+          check_run: true
+          job_summary: true
+          report_individual_runs: false
+          fail_on: nothing
+          action_fail: false
+
